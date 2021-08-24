@@ -1,0 +1,45 @@
+# This file can be used by `makepkg`, a command line tool
+# for Arch Linux used to create packages, typically for the
+# Arch Linux User Repository (AUR).
+#
+# This project is yet to be published on the AUR, since
+# the need for it is dubious, but before doing so the PKGBUILD
+# file needs to be thoroughly checked and modified so that
+# it follows the AUR guidelines.
+
+pkgname=posixfio
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="C++ Wrapper for basic POSIX file operations"
+arch=('any')
+makedepends=('gcc>=11' 'cmake>=3.20' 'bash')
+
+prepare() {
+	# This operation symlinks required files from the directory containing PKGBUILD
+	# to "src/${pkgname}-${pkgver}": doing so implies that PKGBUILD is one directory
+	# inside the root of the project.
+	local reqfiles=('include' 'posixfio' 'test' 'CMakeLists.txt' 'build.sh')
+	local reqfile
+	mkdir -p ${pkgname}-${pkgver}
+	for reqfile in ${reqfiles[@]}; do
+		local reqfile_real="$(realpath ../../"$reqfile")"
+		echo "prepare(): linking '$reqfile_real' to '${pkgname}-${pkgver}/$reqfile'"
+		rm -f ${pkgname}-${pkgver}/"$reqfile"
+		ln -s "$reqfile_real" ${pkgname}-${pkgver}/"$reqfile"
+	done
+}
+
+build() {
+	cd "$pkgname-$pkgver"
+	installpath="$pkgdir/usr" ./build.sh Release
+}
+
+check() {
+	cd "$pkgname-$pkgver/build-Release"
+	test/posixfio-test
+}
+
+package() {
+	cd "$pkgname-$pkgver"
+	cmake --install build-Release
+}

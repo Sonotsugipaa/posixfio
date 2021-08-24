@@ -1,0 +1,188 @@
+#include <test_tools.hpp>
+
+#include <posixfio.hpp>
+
+#include <array>
+#include <iostream>
+#include <cstring>
+#include <cassert>
+
+
+
+namespace {
+
+	using namespace posixfio;
+
+	constexpr auto eFailure = utest::ResultType::eFailure;
+	constexpr auto eNeutral = utest::ResultType::eNeutral;
+	constexpr auto eSuccess = utest::ResultType::eSuccess;
+
+	std::string_view tmpFile = "tmpfile.txt";
+	std::string_view ioPayload = "[IO payload data]";
+
+	#define IO_PAYLOAD_BUFFER_(NAME_) std::array<char, 18> NAME_; NAME_[17] = '\0'; assert(NAME_.size() == ioPayload.length() + 1);
+
+
+	std::string_view errno_str(int err_no) {
+		#define ERRNO_CASE1_(ERRNO_) case ERRNO_: return #ERRNO_;
+		#define ERRNO_CASE2_(ERRNO_, ERRNO0_) case ERRNO_: static_assert(ERRNO_ == ERRNO0_); return #ERRNO_ "&" #ERRNO0_ ;
+		switch(err_no) {
+			ERRNO_CASE1_(EACCES)
+			ERRNO_CASE2_(EAGAIN, EWOULDBLOCK)
+			ERRNO_CASE1_(EBADF)
+			ERRNO_CASE1_(EBUSY)
+			ERRNO_CASE1_(EDESTADDRREQ)
+			ERRNO_CASE1_(EDQUOT)
+			ERRNO_CASE1_(EEXIST)
+			ERRNO_CASE1_(EFAULT)
+			ERRNO_CASE1_(EFBIG)
+			ERRNO_CASE1_(EINTR)
+			ERRNO_CASE1_(EINVAL)
+			ERRNO_CASE1_(EIO)
+			ERRNO_CASE1_(EISDIR)
+			ERRNO_CASE1_(ELOOP)
+			ERRNO_CASE1_(EMFILE)
+			ERRNO_CASE1_(ENAMETOOLONG)
+			ERRNO_CASE1_(ENODEV)
+			ERRNO_CASE1_(ENOENT)
+			ERRNO_CASE1_(ENOMEM)
+			ERRNO_CASE1_(ENOSPC)
+			ERRNO_CASE1_(ENOTDIR)
+			ERRNO_CASE1_(ENXIO)
+			ERRNO_CASE1_(EOPNOTSUPP)
+			ERRNO_CASE1_(EOVERFLOW)
+			ERRNO_CASE1_(EPERM)
+			ERRNO_CASE1_(EPIPE)
+			ERRNO_CASE1_(EROFS)
+			ERRNO_CASE1_(ETXTBSY)
+			default: return "unknown_errno";
+		}
+		#undef ERRNO_CASE1_
+		#undef ERRNO_CASE2_
+	}
+
+
+	utest::ResultType create_file(std::ostream& out) {
+		File f;
+		try {
+			f = File::open(tmpFile.data(), O_WRONLY | O_CREAT | O_TRUNC);
+		} catch(...) { }
+		if(! f) {
+			out << "ERRNO " << errno << ' ' << errno_str(errno) << '\n';
+			return eFailure;
+		}
+		return eSuccess;
+	}
+
+
+	utest::ResultType write_file(std::ostream& out) {
+		File f;
+		try {
+			f = File::open(tmpFile.data(), O_WRONLY);
+			ssize_t wr = f.write(ioPayload.data(), ioPayload.size());
+			if(wr < 0) throw 0;
+			if(wr != (ssize_t) ioPayload.size()) {
+				out << "Incomplete write: " << wr << " of " << ioPayload.size() << " bytes" << std::endl;
+				return eFailure;
+			}
+		} catch(...) {
+			f = File();
+		}
+		if(! f) {
+			out << "ERRNO " << errno << ' ' << errno_str(errno) << '\n';
+			return eFailure;
+		}
+		return eSuccess;
+	}
+
+
+	utest::ResultType read_file(std::ostream& out) {
+		File f;
+		try {
+			f = File::open(tmpFile.data(), O_RDONLY);
+			IO_PAYLOAD_BUFFER_(buf)
+			ssize_t rd = f.read(buf.data(), buf.size()-1);
+			if(rd < 0) throw 0;
+			if(rd != (buf.size()-1)) {
+				out << "Incomplete read: " << rd << " of " << (buf.size()-1) << " bytes" << std::endl;
+				return eFailure;
+			}
+			if(0 != strncmp(buf.data(), ioPayload.data(), buf.size()-1)) {
+				out << "Payload mismatch: " << buf.data() << " instead of " << ioPayload.data() << " bytes" << std::endl;
+				return eFailure;
+			}
+		} catch(...) {
+			f = File();
+		}
+		if(! f) {
+			out << "ERRNO " << errno << ' ' << errno_str(errno) << '\n';
+			return eFailure;
+		}
+		return eSuccess;
+	}
+
+
+	utest::ResultType close_file(std::ostream& out) {
+		bool cl = false;
+		try {
+			File f = File::open(tmpFile.data(), O_WRONLY);
+			cl = f.close();
+			if(! cl) throw 0;
+		} catch(...) {
+			out << "ERRNO " << errno << ' ' << errno_str(errno) << '\n';
+			return eFailure;
+		}
+		return eSuccess;
+	}
+
+
+	utest::ResultType copy_file(std::ostream& out) {
+		File f0, f1;
+		try {
+			f0 = File::open(tmpFile.data(), O_RDWR);
+			f1 = f0;
+			IO_PAYLOAD_BUFFER_(buf)
+			ssize_t beg0 = 0;
+			ssize_t end0 = ioPayload.length() / 2;
+			ssize_t beg1 = end0+1;
+			ssize_t end1 = ioPayload.length();
+			ssize_t retval;
+			errno = 0;
+			bool result = true;
+			#define TRY_(OP_) if(result) { result = (OP_); }
+				TRY_(beg0 == (retval = f0.lseek(beg0, SEEK_SET)));
+				TRY_((end0-beg0) == (retval = f0.write(ioPayload.data(), end0-beg0)));
+				TRY_(beg1 == (retval = f1.lseek(beg1, SEEK_SET)));
+				TRY_((end1-beg1) == (retval = f1.write(ioPayload.data()+beg1, end1-beg1)));
+				TRY_(0 == (retval = f0.lseek(0, SEEK_SET)));
+				TRY_((end1-beg0) == (retval = f0.read(buf.data(), end1-beg0)));
+				TRY_(0 == strncmp(buf.data(), ioPayload.data(), ioPayload.length()));
+			#undef TRY_
+			if(! result) {
+				out << "Faulty IO operation: retval = " << retval << '\n';
+				throw 0;
+			}
+		} catch(...) {
+			f0 = File();
+		}
+		if(! (f0 && f1)) {
+			out << "ERRNO " << errno << ' ' << errno_str(errno) << '\n';
+			return eFailure;
+		}
+		return eSuccess;
+	}
+
+}
+
+
+
+int main(int, char**) {
+	auto batch = utest::TestBatch(std::cout);
+	batch
+		.run("Create file", create_file)
+		.run("Write file", write_file)
+		.run("Read file", read_file)
+		.run("Close file", close_file)
+		.run("Copy-construct file", copy_file);
+	return batch.failures() == 0? EXIT_SUCCESS : EXIT_FAILURE;
+}
