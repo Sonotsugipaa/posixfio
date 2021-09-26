@@ -8,9 +8,6 @@
 
 # Set the project's structure
 
-	set(PROJECT_SOURCE_DIR .)
-	set(PROJECT_BINARY_DIR .)
-
 	set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
 	set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
 	set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
@@ -50,7 +47,11 @@
 	#
 	# add_compile_definitions(POSIXFIO_NOTHROW)
 
-	add_subdirectory(posixfio)
+	if(UNIX)
+		add_subdirectory(posixfio/unix)
+	elseif(WIN32)
+		add_subdirectory(posixfio/win32)
+	endif()
 
 
 # Add unit test module
