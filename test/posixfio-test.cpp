@@ -25,14 +25,13 @@ namespace {
 
 	std::string_view errno_str(int err_no) {
 		#define ERRNO_CASE1_(ERRNO_) case ERRNO_: return #ERRNO_;
-		#define ERRNO_CASE2_(ERRNO_, ERRNO0_) case ERRNO_: static_assert(ERRNO_ == ERRNO0_); return #ERRNO_ "&" #ERRNO0_ ;
+		#define ERRNO_CASE2_(ERRNO_, ERRNO0_) case ERRNO_: return #ERRNO_ ;
 		switch(err_no) {
 			ERRNO_CASE1_(EACCES)
 			ERRNO_CASE2_(EAGAIN, EWOULDBLOCK)
 			ERRNO_CASE1_(EBADF)
 			ERRNO_CASE1_(EBUSY)
 			ERRNO_CASE1_(EDESTADDRREQ)
-			ERRNO_CASE1_(EDQUOT)
 			ERRNO_CASE1_(EEXIST)
 			ERRNO_CASE1_(EFAULT)
 			ERRNO_CASE1_(EFBIG)

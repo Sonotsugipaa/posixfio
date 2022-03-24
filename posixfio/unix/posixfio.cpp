@@ -5,6 +5,8 @@
 #include <utility> // std::move
 #include <new>
 
+#include <unistd.h>
+
 
 
 namespace posixfio {
@@ -17,19 +19,19 @@ namespace posixfio {
 	#endif
 
 
-	File File::open(const char* pathname, int flags, mode_t mode) {
+	File File::open(const char* pathname, int flags, posixfio::mode_t mode) {
 		File r = ::open(pathname, flags, mode);
 		if(! r) POSIXFIO_THROWERRNO((void) 0);
 		return r;
 	}
 
-	File File::creat(const char* pathname, mode_t mode) {
+	File File::creat(const char* pathname, posixfio::mode_t mode) {
 		File r = ::creat(pathname, mode);
 		if(! r) POSIXFIO_THROWERRNO((void) 0);
 		return r;
 	}
 
-	File File::openat(fd_t dirfd, const char* pathname, int flags, mode_t mode) {
+	File File::openat(fd_t dirfd, const char* pathname, int flags, posixfio::mode_t mode) {
 		File r = ::openat(dirfd, pathname, flags, mode);
 		if(! r) POSIXFIO_THROWERRNO((void) 0);
 		return r;
@@ -111,16 +113,16 @@ namespace posixfio {
 	}
 
 
-	ssize_t File::read(void* buf, size_t count) {
-		ssize_t rd = ::read(fd_, buf, count);
+	posixfio::ssize_t File::read(void* buf, size_t count) {
+		posixfio::ssize_t rd = ::read(fd_, buf, count);
 		if(rd < 0) {
 			POSIXFIO_THROWERRNO(return rd);
 		}
 		return rd;
 	}
 
-	ssize_t File::write(const void* buf, size_t count) {
-		ssize_t wr = ::write(fd_, buf, count);
+	posixfio::ssize_t File::write(const void* buf, size_t count) {
+		posixfio::ssize_t wr = ::write(fd_, buf, count);
 		if(wr < 0) {
 			POSIXFIO_THROWERRNO(return wr);
 		}
@@ -129,7 +131,7 @@ namespace posixfio {
 
 
 	off_t File::lseek(off_t offset, int whence) {
-		ssize_t seek = ::lseek(fd_, offset, whence);
+		posixfio::ssize_t seek = ::lseek(fd_, offset, whence);
 		if(seek < 0) {
 			POSIXFIO_THROWERRNO((void) 0);
 		}

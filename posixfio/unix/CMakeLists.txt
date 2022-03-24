@@ -5,6 +5,7 @@ include_directories(h)
 
 add_library(posixfio
 	SHARED posixfio.cpp)
+add_compile_definitions(POSIXFIO_UNIX)
 set_target_properties(
 	posixfio PROPERTIES
 	VERSION "${PROJECT_VERSION}"

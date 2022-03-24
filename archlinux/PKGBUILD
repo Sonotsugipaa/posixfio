@@ -9,16 +9,16 @@
 
 pkgname=posixfio
 pkgver=0.1.0
-pkgrel=2
+pkgrel=3
 pkgdesc="C++ Wrapper for basic POSIX file operations"
 arch=('any')
-makedepends=('gcc>=11' 'cmake>=3.20' 'bash')
+makedepends=('gcc>=11' 'cmake>=3.20')
 
 prepare() {
 	# This operation symlinks required files from the directory containing PKGBUILD
 	# to "src/${pkgname}-${pkgver}": doing so implies that PKGBUILD is one directory
 	# inside the root of the project.
-	local reqfiles=('include' 'posixfio' 'test' 'CMakeLists.txt' 'build.sh')
+	local reqfiles=('include' 'posixfio' 'test' 'CMakeLists.txt' 'Config.cmake.in' 'build.sh')
 	local reqfile
 	mkdir -p ${pkgname}-${pkgver}
 	for reqfile in ${reqfiles[@]}; do

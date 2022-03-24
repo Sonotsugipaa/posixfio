@@ -19,10 +19,10 @@
 
 # Set warning levels
 
-	if(${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU")
+	if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
 		add_compile_options(-Wall -Wextra -Wpedantic)
-	elseif(${CMAKE_CXX_COMPILER_ID} STREQUAL "MSVC")
-		add_compile_options(\Wall)
+	elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
+		# add_compile_options(\\Wall) # How...?
 	else()
 		message(WARNING "Toolchain \"${CMAKE_CXX_COMPILER_ID}\" not recognized by the project")
 	endif()
@@ -57,3 +57,38 @@
 # Add unit test module
 
 	add_subdirectory(test)
+
+
+# Setup `apcfConfig.cmake` holy fuck this is copypasty
+
+add_library(posixfio::posixfio ALIAS posixfio)
+
+include(GNUInstallDirs)
+install(
+	TARGETS posixfio
+	EXPORT posixfioTargets
+	ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} )
+
+install(
+	EXPORT posixfioTargets
+	DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/posixfio
+	NAMESPACE posixfio::posixfio
+	FILE posixfioTargets.cmake )
+
+include(CMakePackageConfigHelpers)
+configure_package_config_file(
+	"Config.cmake.in"
+	"posixfioConfig.cmake"
+	INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/posixfio
+	PATH_VARS CMAKE_INSTALL_LIBDIR )
+
+write_basic_package_version_file(
+	${CMAKE_CURRENT_BINARY_DIR}/posixfioConfigVersion.cmake
+	VERSION "${PROJECT_VERSION}"
+	COMPATIBILITY SameMajorVersion )
+
+install(
+	FILES
+		"${CMAKE_CURRENT_BINARY_DIR}/posixfioConfig.cmake"
+		"${CMAKE_CURRENT_BINARY_DIR}/posixfioConfigVersion.cmake"
+	DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/posixfio" )
