@@ -1,9 +1,12 @@
 #include <test_tools.hpp>
 
-#include <posixfio.hpp>
+#include "posixfio.hpp"
 
 #include <array>
 #include <iostream>
+#include <string>
+#include <string_view>
+#include <random>
 #include <cstring>
 #include <cassert>
 
@@ -17,10 +20,11 @@ namespace {
 	constexpr auto eNeutral = utest::ResultType::eNeutral;
 	constexpr auto eSuccess = utest::ResultType::eSuccess;
 
-	std::string_view tmpFile = "tmpfile.txt";
-	std::string_view ioPayload = "[IO payload data]";
+	const std::string_view tmpFile = "tmpfile";
 
-	#define IO_PAYLOAD_BUFFER_(NAME_) std::array<char, 18> NAME_; NAME_[17] = '\0'; assert(NAME_.size() == ioPayload.length() + 1);
+	std::string ioPayload;
+
+	#define IO_PAYLOAD_BUFFER_(NAME_) std::string NAME_; NAME_.resize(ioPayload.size());
 
 
 	std::string_view errno_str(int err_no) {
@@ -61,6 +65,17 @@ namespace {
 	}
 
 
+	std::string mkPayload() {
+		static constexpr size_t payloadSize = 8192;
+		std::string r;  r.reserve(payloadSize);
+		auto rng = std::minstd_rand(payloadSize);
+		for(size_t i=0; i < payloadSize; ++i) {
+			r.push_back(char(rng()));
+		}
+		return r;
+	}
+
+
 	utest::ResultType create_file(std::ostream& out) {
 		File f;
 		try {
@@ -95,6 +110,33 @@ namespace {
 	}
 
 
+	utest::ResultType write_fileview(std::ostream& out) {
+		File f;
+		FileView fv;
+		try {
+			f = File::open(tmpFile.data(), O_WRONLY);
+			fv = f.fd();
+			ssize_t wr = fv.write(ioPayload.data(), ioPayload.size());
+			if(wr < 0) throw 0;
+			if(wr != (ssize_t) ioPayload.size()) {
+				out << "Incomplete write: " << wr << " of " << ioPayload.size() << " bytes" << std::endl;
+				return eFailure;
+			}
+		} catch(...) {
+			f = File();
+		}
+		if(! fv) {
+			out << "ERRNO (FileView) " << errno << ' ' << errno_str(errno) << '\n';
+			return eFailure;
+		}
+		if(! f) {
+			out << "ERRNO (File) " << errno << ' ' << errno_str(errno) << '\n';
+			return eFailure;
+		}
+		return eSuccess;
+	}
+
+
 	utest::ResultType read_file(std::ostream& out) {
 		File f;
 		try {
@@ -102,7 +144,7 @@ namespace {
 			IO_PAYLOAD_BUFFER_(buf)
 			ssize_t rd = f.read(buf.data(), buf.size()-1);
 			if(rd < 0) throw 0;
-			if(rd != (buf.size()-1)) {
+			if(rd != ssize_t(buf.size()-1)) {
 				out << "Incomplete read: " << rd << " of " << (buf.size()-1) << " bytes" << std::endl;
 				return eFailure;
 			}
@@ -115,6 +157,38 @@ namespace {
 		}
 		if(! f) {
 			out << "ERRNO " << errno << ' ' << errno_str(errno) << '\n';
+			return eFailure;
+		}
+		return eSuccess;
+	}
+
+
+	utest::ResultType read_fileview(std::ostream& out) {
+		File f;
+		FileView fv;
+		try {
+			f = File::open(tmpFile.data(), O_RDONLY);
+			fv = f.fd();
+			IO_PAYLOAD_BUFFER_(buf)
+			ssize_t rd = fv.read(buf.data(), buf.size()-1);
+			if(rd < 0) throw 0;
+			if(rd != ssize_t(buf.size()-1)) {
+				out << "Incomplete read: " << rd << " of " << (buf.size()-1) << " bytes" << std::endl;
+				return eFailure;
+			}
+			if(0 != strncmp(buf.data(), ioPayload.data(), buf.size()-1)) {
+				out << "Payload mismatch: " << buf.data() << " instead of " << ioPayload.data() << " bytes" << std::endl;
+				return eFailure;
+			}
+		} catch(...) {
+			f = File();
+		}
+		if(! fv) {
+			out << "ERRNO (FileView) " << errno << ' ' << errno_str(errno) << '\n';
+			return eFailure;
+		}
+		if(! f) {
+			out << "ERRNO (File) " << errno << ' ' << errno_str(errno) << '\n';
 			return eFailure;
 		}
 		return eSuccess;
@@ -178,9 +252,16 @@ namespace {
 int main(int, char**) {
 	auto batch = utest::TestBatch(std::cout);
 	batch
-		.run("Create file", create_file)
+		.run("Create file", create_file);
+	ioPayload = mkPayload();
+	batch
 		.run("Write file", write_file)
-		.run("Read file", read_file)
+		.run("Read file", read_file);
+	ioPayload = mkPayload();
+	batch
+		.run("Write file view", write_fileview)
+		.run("Read file view", read_fileview);
+	batch
 		.run("Close file", close_file)
 		.run("Copy-construct file", copy_file);
 	return batch.failures() == 0? EXIT_SUCCESS : EXIT_FAILURE;

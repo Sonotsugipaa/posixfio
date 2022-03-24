@@ -8,7 +8,7 @@
 # it follows the AUR guidelines.
 
 pkgname=posixfio
-pkgver=0.1.0
+pkgver=0.1.2
 pkgrel=3
 pkgdesc="C++ Wrapper for basic POSIX file operations"
 arch=('any')
@@ -31,12 +31,14 @@ prepare() {
 
 build() {
 	cd "$pkgname-$pkgver"
+	unset srcpath # Set but not overridden by the build script
+	unset dstpath # ^ ditto
 	installpath="$pkgdir/usr" ./build.sh Release
 }
 
 check() {
 	cd "$pkgname-$pkgver/build-Release"
-	test/posixfio-test
+	./posixfio-test
 }
 
 package() {

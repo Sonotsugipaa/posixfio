@@ -5,7 +5,9 @@
 #include <utility> // std::move
 #include <new>
 
-#include <unistd.h>
+#include <Windows.h>
+#include <io.h>
+#include <fileapi.h>
 
 
 
@@ -20,19 +22,13 @@ namespace posixfio {
 
 
 	File File::open(const char* pathname, int flags, posixfio::mode_t mode) {
-		File r = ::open(pathname, flags, mode);
+		File r = ::open(pathname, flags, mode | O_BINARY);
 		if(! r) POSIXFIO_THROWERRNO((void) 0);
 		return r;
 	}
 
 	File File::creat(const char* pathname, posixfio::mode_t mode) {
 		File r = ::creat(pathname, mode);
-		if(! r) POSIXFIO_THROWERRNO((void) 0);
-		return r;
-	}
-
-	File File::openat(fd_t dirfd, const char* pathname, int flags, posixfio::mode_t mode) {
-		File r = ::openat(dirfd, pathname, flags, mode);
 		if(! r) POSIXFIO_THROWERRNO((void) 0);
 		return r;
 	}
@@ -55,7 +51,7 @@ namespace posixfio {
 	File::File(File&& mv):
 			fd_(std::move(mv.fd_))
 	{
-		mv.fd_ = -1;
+		mv.fd_ = NULL_FD;
 	}
 
 
@@ -65,9 +61,9 @@ namespace posixfio {
 				::close(fd_);
 			#else
 				int r = ::close(fd_);
-				assert(r == 0 || r == -1);
+				assert(r == 0 || r == NULL_FD);
 			#endif
-			fd_ = -1;
+			fd_ = NULL_FD;
 		}
 	}
 
@@ -75,9 +71,10 @@ namespace posixfio {
 	bool File::close() {
 		if(fd_ >= 0) {
 			int r = ::close(fd_);
-			assert((r == 0) || (r == -1));
+			assert((r == 0) || (r == NULL_FD));
 			if(r < 0) POSIXFIO_THROWERRNO(return false);
 		}
+		fd_ = NULL_FD;
 		return true;
 	}
 
@@ -136,51 +133,6 @@ namespace posixfio {
 			POSIXFIO_THROWERRNO((void) 0);
 		}
 		return seek;
-	}
-
-
-	bool File::ftruncate(off_t length) {
-		int trunc = ::ftruncate(fd_, length);
-		assert(trunc == 0 || trunc == -1);
-		if(trunc < 0) {
-			POSIXFIO_THROWERRNO((void) 0);
-		}
-		return trunc;
-	}
-
-
-	bool File::fsync() {
-		int res = ::fsync(fd_);
-		assert(res == 0 || res == -1);
-		if(res < 0) {
-			POSIXFIO_THROWERRNO((void) 0);
-		}
-		return res;
-	}
-
-
-	bool File::fdatasync() {
-		int res = ::fdatasync(fd_);
-		assert(res == 0 || res == -1);
-		if(res < 0) {
-			POSIXFIO_THROWERRNO((void) 0);
-		}
-		return res;
-	}
-
-
-	Pipe Pipe::create() {
-		fd_t fd[2];
-		Pipe r;
-		auto result = pipe(fd);
-		assert(result == 0 || result == -1);
-		if(result < 0) {
-			POSIXFIO_THROWERRNO((void) 0);
-		} else {
-			r.rd = fd[0];
-			r.wr = fd[1];
-		}
-		return r;
 	}
 
 
