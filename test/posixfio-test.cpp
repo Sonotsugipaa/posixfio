@@ -11,10 +11,6 @@
 
 
 
-#pragma message "TODO: test errors, with POSIXFIO_NOTHROW and without"
-
-
-
 namespace {
 
 	using namespace posixfio;
@@ -61,6 +57,7 @@ namespace {
 			ERRNO_CASE1_(EPIPE)
 			ERRNO_CASE1_(EROFS)
 			ERRNO_CASE1_(ETXTBSY)
+			case 0: return "none";
 			default: return "unknown_errno";
 		}
 		#undef ERRNO_CASE1_
@@ -68,10 +65,27 @@ namespace {
 	}
 
 
+	utest::ResultType requireErrno(std::ostream& out, int expect, int (*fn)(std::ostream& out)) {
+		int got;
+		try {
+			got = fn(out);
+		} catch(Errno& errNo) {
+			got = errNo.value;
+		}
+		if(got != expect) {
+			out << "Expected errno " << errno_str(expect) << ", got " << errno_str(got) << std::endl;
+			return eFailure;
+		} else {
+			return eSuccess;
+		}
+	}
+
+
 	std::string mkPayload() {
 		static constexpr size_t payloadSize = 8192;
+		static size_t state = 0;
 		std::string r;  r.reserve(payloadSize);
-		auto rng = std::minstd_rand(payloadSize);
+		auto rng = std::minstd_rand(state = (payloadSize ^ state));
 		for(size_t i=0; i < payloadSize; ++i) {
 			r.push_back(char(rng()));
 		}
@@ -293,6 +307,22 @@ namespace {
 		return eSuccess;
 	}
 
+
+	utest::ResultType errno_enoent(std::ostream& out) {
+		return requireErrno(out, ENOENT, [](std::ostream&) {
+			auto f = File::open(
+				"/\033No file named like this should ever exist in a filesystem's root dir",
+				O_RDONLY );
+			if(f) {
+				return 0;
+			} else {
+				int curErrno = errno;
+				errno = 0;
+				return curErrno;
+			}
+		});
+	}
+
 }
 
 
@@ -311,6 +341,7 @@ int main(int, char**) {
 		.run("Read file view", read_fileview);
 	batch
 		.run("Close file", close_file)
+		.run("Open file (ENOENT)", errno_enoent)
 		.run("Copy-construct file", copy_file)
 		.run("Copy-construct file view", copy_fileview);
 	return batch.failures() == 0? EXIT_SUCCESS : EXIT_FAILURE;

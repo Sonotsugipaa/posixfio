@@ -12,10 +12,6 @@
 
 
 
-#pragma message "TODO: test errors, with POSIXFIO_NOTHROW and without"
-
-
-
 namespace {
 
 	using namespace posixfio;
@@ -91,6 +87,7 @@ namespace {
 			ERRNO_CASE1_(EPIPE)
 			ERRNO_CASE1_(EROFS)
 			ERRNO_CASE1_(ETXTBSY)
+			case 0: return "none";
 			default: return "unknown_errno";
 		}
 		#undef ERRNO_CASE1_
@@ -98,6 +95,22 @@ namespace {
 	}
 
 	#define CATCH_ERRNO_(OS_) catch(Errno& errNo) { OS_ << "ERRNO " << errno_str(errNo.value) << ' ' << errNo.value << std::endl; }
+
+
+	utest::ResultType requireErrno(std::ostream& out, int expect, int (*fn)(std::ostream& out)) {
+		int got;
+		try {
+			got = fn(out);
+		} catch(Errno& errNo) {
+			got = errNo.value;
+		}
+		if(got != expect) {
+			out << "Expected errno " << errno_str(expect) << ", got " << errno_str(got) << std::endl;
+			return eFailure;
+		} else {
+			return eSuccess;
+		}
+	}
 
 
 	std::string mkPayload(size_t payloadSize) {
@@ -203,6 +216,23 @@ namespace {
 	}
 
 
+	utest::ResultType errno_ebadf(std::ostream& out) {
+		return requireErrno(out, EBADF, [](std::ostream& out) {
+			auto f = File::open(tmpFile.c_str(), O_RDONLY | O_CREAT);
+			ssize_t wr = f.write(tmpFile.c_str(), 1); // Can't write to a RDONLY file
+			switch(wr) {
+				case 0:  out << "CRITICAL: write(..., 1) returned 0" << std::endl;  return -1;
+				case 1:  return 0;
+				default:  {
+					int curErrno = errno;
+					errno = 0;
+					return curErrno;
+				}
+			}
+		});
+	}
+
+
 	void testPayload(
 			utest::TestBatch& batch, size_t payloadSize,
 			const std::string& wrString, utest::ResultType (*wrFn)(std::ostream&),
@@ -257,5 +287,6 @@ namespace {
 int main(int, char**) {
 	auto batch = utest::TestBatch(std::cout);
 	testPayloads<220, 2000, 2048, 2500>(batch);
+	batch.run("Write read-only file (EBADF)", errno_ebadf);
 	return batch.failures() == 0? EXIT_SUCCESS : EXIT_FAILURE;
 }

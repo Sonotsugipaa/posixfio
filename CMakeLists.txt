@@ -43,7 +43,11 @@
 	# the chosen error management method, the source file will use a different
 	# namespace, and projects that disable exception handling need to make sure
 	# that the `POSIXFIO_NOTHROW` macro is defined before `posixfio.hpp` is
-	# include.
+	# included.
+	#
+	# Simply put: don't disable exceptions unless you really need to,
+	# and assume that POSIX-like functions always return non-negative numbers.
+	# Unless the negative number does not signal an error.
 	#
 	# add_compile_definitions(POSIXFIO_NOTHROW)
 
