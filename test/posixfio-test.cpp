@@ -11,6 +11,10 @@
 
 
 
+#pragma message "TODO: test errors, with POSIXFIO_NOTHROW and without"
+
+
+
 namespace {
 
 	using namespace posixfio;

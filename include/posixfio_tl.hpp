@@ -12,15 +12,23 @@ namespace posixfio {
 
 	namespace buffer_op {
 
-		ssize_t bfRead(FileView, void* buf, size_t* bufSizePtr, size_t* bufOffsetPtr, size_t bufCapacity, void* dst, size_t count);
-		ssize_t bfWrite(FileView file, void* buf, size_t* bufSizePtr, size_t* bufOffsetPtr, size_t bufCapacity, const void* src, size_t count);
-		ssize_t bfFlushWrite(FileView, const void* buf, size_t bufOffset, size_t bufSize);
+		/* Functions in this namespace are only to be used by this library,
+		 * and their signatures may change at any time in any way.
+		 * */
+
+		ssize_t bfRead(FileView, void* buf, size_t* bufOffsetPtr, size_t* bufSizePtr, size_t bufCapacity, void* dst, size_t count);
+		ssize_t bfWrite(FileView, void* buf, size_t* bufOffsetPtr, size_t* bufSizePtr, size_t bufCapacity, const void* src, size_t count);
 
 	};
 
 
 
 	using byte_t = unsigned char;
+
+
+	ssize_t readAll(FileView, void* buf, size_t count);
+
+	ssize_t writeAll(FileView, const void* buf, size_t count);
 
 
 	class HeapInputBuffer {
@@ -152,7 +160,11 @@ namespace posixfio {
 
 		~ArrayOutputBuffer() {
 			if(file_) {
-				if(bufferSize_ > bufferOffset_)  buffer_op::bfFlushWrite(file_, buffer_, bufferOffset_, bufferSize_);
+				if(bufferSize_ > bufferOffset_) {
+					writeAll(file_,
+						reinterpret_cast<byte_t*>(buffer_) + bufferOffset_,
+						bufferSize_ - bufferOffset_ );
+				}
 			}
 		}
 
@@ -168,7 +180,9 @@ namespace posixfio {
 		}
 
 		void flush() {
-			buffer_op::bfFlushWrite(file_, buffer_, bufferOffset_, bufferSize_);
+			writeAll(file_,
+				reinterpret_cast<byte_t*>(buffer_) + bufferOffset_,
+				bufferSize_ - bufferOffset_ );
 		}
 	};
 

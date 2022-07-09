@@ -12,6 +12,10 @@
 
 
 
+#pragma message "TODO: test errors, with POSIXFIO_NOTHROW and without"
+
+
+
 namespace {
 
 	using namespace posixfio;
@@ -45,7 +49,7 @@ namespace {
 		}
 	#else
 		ssize_t alwaysThrowErr(ssize_t result) {
-			assert(result > 0);
+			assert(result >= 0);
 			return result;
 		}
 
@@ -145,7 +149,7 @@ namespace {
 				ssize_t wr;
 				ssize_t count = ioPayload.size();
 				size_t cursor = 0;
-				#define WR_ { wr = alwaysThrowErr(buf.write(ioPayload.data() + cursor, count));  count -= wr;  cursor += wr; }
+				#define WR_ { wr = alwaysThrowErr(buf.write(ioPayload.data() + cursor, count));  assert(wr > 0);  count -= wr;  cursor += wr; }
 				WR_
 				if(wr != 0 && count > 0) {
 					out << "Partial write of " << wr << '/' << ioPayload.size() << " bytes" << std::endl;
@@ -252,9 +256,6 @@ namespace {
 
 int main(int, char**) {
 	auto batch = utest::TestBatch(std::cout);
-
 	testPayloads<220, 2000, 2048, 2500>(batch);
-	testPayloads<220, 2048, 2500, 2800>(batch);
-
 	return batch.failures() == 0? EXIT_SUCCESS : EXIT_FAILURE;
 }
