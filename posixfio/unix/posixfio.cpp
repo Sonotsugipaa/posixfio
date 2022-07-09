@@ -65,9 +65,9 @@ namespace posixfio {
 				::close(fd_);
 			#else
 				int r = ::close(fd_);
-				assert(r == 0 || r == -1);
+				assert((r == 0) || (r == -1 /* POSIX indicates `-1` specifically */));
 			#endif
-			fd_ = -1;
+			fd_ = NULL_FD;
 		}
 	}
 
@@ -75,8 +75,9 @@ namespace posixfio {
 	bool File::close() {
 		if(fd_ >= 0) {
 			int r = ::close(fd_);
-			assert((r == 0) || (r == -1));
-			if(r < 0) POSIXFIO_THROWERRNO(return false);
+			assert((r == 0) || (r == -1 /* POSIX indicates `-1` specifically */));
+			if(r < 0)  POSIXFIO_THROWERRNO(return false);
+			else  fd_ = NULL_FD;
 		}
 		return true;
 	}
