@@ -177,7 +177,7 @@ namespace posixfio {
 
 
 
-	HeapInputBuffer::HeapInputBuffer():
+	InputBuffer::InputBuffer():
 			file_()
 			#ifndef NDEBUG
 				, buffer_(nullptr)
@@ -185,7 +185,7 @@ namespace posixfio {
 	{ }
 
 
-	HeapInputBuffer::HeapInputBuffer(HeapInputBuffer&& mv):
+	InputBuffer::InputBuffer(InputBuffer&& mv):
 			#define MV_(MEMBER_) MEMBER_(std::move(mv.MEMBER_))
 			#define CP_(MEMBER_) MEMBER_(mv.MEMBER_)
 				MV_(file_),
@@ -203,7 +203,7 @@ namespace posixfio {
 	}
 
 
-	HeapInputBuffer::HeapInputBuffer(FileView file, size_t cap):
+	InputBuffer::InputBuffer(FileView file, size_t cap):
 			file_(file),
 			offset_(0),
 			size_(0),
@@ -216,7 +216,7 @@ namespace posixfio {
 	}
 
 
-	HeapInputBuffer::~HeapInputBuffer() {
+	InputBuffer::~InputBuffer() {
 		if(file_) {
 			delete[] buffer_;
 			file_.close();
@@ -227,19 +227,19 @@ namespace posixfio {
 	}
 
 
-	HeapInputBuffer& HeapInputBuffer::operator=(HeapInputBuffer&& mv) {
-		this->~HeapInputBuffer();
-		return * new (this) HeapInputBuffer(std::move(mv));
+	InputBuffer& InputBuffer::operator=(InputBuffer&& mv) {
+		this->~InputBuffer();
+		return * new (this) InputBuffer(std::move(mv));
 	}
 
 
-	ssize_t HeapInputBuffer::read(void* userBuf, size_t count) {
+	ssize_t InputBuffer::read(void* userBuf, size_t count) {
 		return buffer_op::bfRead(file_, buffer_, &offset_, &size_, capacity_, userBuf, count);
 	}
 
 
 
-	HeapOutputBuffer::HeapOutputBuffer():
+	OutputBuffer::OutputBuffer():
 			file_()
 			#ifndef NDEBUG
 				, buffer_(nullptr)
@@ -247,7 +247,7 @@ namespace posixfio {
 	{ }
 
 
-	HeapOutputBuffer::HeapOutputBuffer(HeapOutputBuffer&& mv):
+	OutputBuffer::OutputBuffer(OutputBuffer&& mv):
 			#define MV_(MEMBER_) MEMBER_(std::move(mv.MEMBER_))
 			#define CP_(MEMBER_) MEMBER_(mv.MEMBER_)
 				MV_(file_),
@@ -265,7 +265,7 @@ namespace posixfio {
 	}
 
 
-	HeapOutputBuffer::HeapOutputBuffer(FileView file, size_t cap):
+	OutputBuffer::OutputBuffer(FileView file, size_t cap):
 			file_(file),
 			offset_(0),
 			size_(0),
@@ -278,7 +278,7 @@ namespace posixfio {
 	}
 
 
-	HeapOutputBuffer::~HeapOutputBuffer() {
+	OutputBuffer::~OutputBuffer() {
 		if(file_) {
 			assert(size_ >= offset_);
 			if(size_ > offset_)  writeAll(file_, reinterpret_cast<byte_t*>(buffer_) + offset_, size_ - offset_);
@@ -290,17 +290,17 @@ namespace posixfio {
 	}
 
 
-	HeapOutputBuffer& HeapOutputBuffer::operator=(HeapOutputBuffer&& mv) {
-		this->~HeapOutputBuffer();
-		return * new (this) HeapOutputBuffer(std::move(mv));
+	OutputBuffer& OutputBuffer::operator=(OutputBuffer&& mv) {
+		this->~OutputBuffer();
+		return * new (this) OutputBuffer(std::move(mv));
 	}
 
 
-	ssize_t HeapOutputBuffer::write(const void* userBuf, size_t count) {
+	ssize_t OutputBuffer::write(const void* userBuf, size_t count) {
 		return buffer_op::bfWrite(file_, buffer_, &offset_, &size_, capacity_, userBuf, count);
 	}
 
-	void HeapOutputBuffer::flush() {
+	void OutputBuffer::flush() {
 		writeAll(file_, reinterpret_cast<byte_t*>(buffer_) + offset_, size_ - offset_);
 	}
 

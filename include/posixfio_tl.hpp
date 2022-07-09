@@ -31,7 +31,7 @@ namespace posixfio {
 	ssize_t writeAll(FileView, const void* buf, size_t count);
 
 
-	class HeapInputBuffer {
+	class InputBuffer {
 	private:
 		FileView file_;
 		size_t offset_;
@@ -41,13 +41,13 @@ namespace posixfio {
 		bool direction_;
 
 	public:
-		HeapInputBuffer();
-		HeapInputBuffer(const HeapInputBuffer&) = delete;
-		HeapInputBuffer(HeapInputBuffer&&);
-		HeapInputBuffer(FileView, size_t capacity);
-		~HeapInputBuffer();
+		InputBuffer();
+		InputBuffer(const InputBuffer&) = delete;
+		InputBuffer(InputBuffer&&);
+		InputBuffer(FileView, size_t capacity);
+		~InputBuffer();
 
-		HeapInputBuffer& operator=(HeapInputBuffer&&);
+		InputBuffer& operator=(InputBuffer&&);
 
 		inline const FileView file() const { return file_; }
 
@@ -60,7 +60,7 @@ namespace posixfio {
 	};
 
 
-	class HeapOutputBuffer {
+	class OutputBuffer {
 	private:
 		FileView file_;
 		size_t offset_;
@@ -70,13 +70,13 @@ namespace posixfio {
 		bool direction_;
 
 	public:
-		HeapOutputBuffer();
-		HeapOutputBuffer(const HeapOutputBuffer&) = delete;
-		HeapOutputBuffer(HeapOutputBuffer&&);
-		HeapOutputBuffer(FileView, size_t capacity);
-		~HeapOutputBuffer();
+		OutputBuffer();
+		OutputBuffer(const OutputBuffer&) = delete;
+		OutputBuffer(OutputBuffer&&);
+		OutputBuffer(FileView, size_t capacity);
+		~OutputBuffer();
 
-		HeapOutputBuffer& operator=(HeapOutputBuffer&&);
+		OutputBuffer& operator=(OutputBuffer&&);
 
 		inline const FileView file() const { return file_; }
 

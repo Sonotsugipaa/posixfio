@@ -132,7 +132,7 @@ namespace {
 
 	template<>
 	struct InputBuffer<0> {
-		using type = HeapInputBuffer;
+		using type = posixfio::InputBuffer;
 		static type ctor(FileView file, size_t varCap) { return type(file, varCap); }
 	};
 
@@ -145,7 +145,7 @@ namespace {
 
 	template<>
 	struct OutputBuffer<0> {
-		using type = HeapOutputBuffer;
+		using type = posixfio::OutputBuffer;
 		static type ctor(FileView file, size_t varCap) { return type(file, varCap); }
 	};
 

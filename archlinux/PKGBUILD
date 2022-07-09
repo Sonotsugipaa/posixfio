@@ -8,7 +8,7 @@
 # it follows the AUR guidelines.
 
 pkgname=posixfio
-pkgver=0.2.0
+pkgver=0.2.1
 pkgrel=1
 pkgdesc="C++ Wrapper for basic POSIX file operations"
 arch=('any')
@@ -39,6 +39,7 @@ build() {
 check() {
 	cd "$pkgname-$pkgver/build-Release"
 	./posixfio-test
+	./posixfio-tl-test
 }
 
 package() {
