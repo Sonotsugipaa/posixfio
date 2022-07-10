@@ -16,8 +16,8 @@ namespace posixfio {
 		 * and their signatures may change at any time in any way.
 		 * */
 
-		ssize_t bfRead(FileView, void* buf, size_t* bufOffsetPtr, size_t* bufSizePtr, size_t bufCapacity, void* dst, size_t count);
-		ssize_t bfWrite(FileView, void* buf, size_t* bufOffsetPtr, size_t* bufSizePtr, size_t bufCapacity, const void* src, size_t count);
+		ssize_t bfRead(FileView, void* buf, size_t* bufBegPtr, size_t* bufEndPtr, size_t bufCapacity, void* dst, size_t count);
+		ssize_t bfWrite(FileView, void* buf, size_t* bufBegPtr, size_t* bufEndPtr, size_t bufCapacity, const void* src, size_t count);
 
 	};
 
@@ -34,11 +34,10 @@ namespace posixfio {
 	class InputBuffer {
 	private:
 		FileView file_;
-		size_t offset_;
-		size_t size_;
+		size_t begin_;
+		size_t end_;
 		size_t capacity_;
 		byte_t* buffer_;
-		bool direction_;
 
 	public:
 		InputBuffer();
@@ -53,21 +52,23 @@ namespace posixfio {
 
 		ssize_t read(void* buf, size_t count);
 
-		inline void discard() {
-			offset_ = 0;
-			size_ = 0;
-		}
+		ssize_t fill();
+		ssize_t fwd();
+		inline byte_t* data() { return buffer_ + begin_; }
+		inline const byte_t* data() const { return buffer_ + begin_; }
+		inline size_t size() const { return end_ - begin_; }
+
+		inline void discard() { begin_ = 0;  end_ = 0; }
 	};
 
 
 	class OutputBuffer {
 	private:
 		FileView file_;
-		size_t offset_;
-		size_t size_;
+		size_t begin_;
+		size_t end_;
 		size_t capacity_;
 		byte_t* buffer_;
-		bool direction_;
 
 	public:
 		OutputBuffer();
@@ -88,10 +89,11 @@ namespace posixfio {
 
 	template<size_t capacity = 4096>
 	class ArrayInputBuffer {
+		static_assert(capacity > 0);
 	private:
 		FileView file_;
-		size_t bufferOffset_;
-		size_t bufferSize_;
+		size_t bufferBegin_;
+		size_t bufferEnd_;
 		byte_t buffer_[capacity];
 
 	public:
@@ -100,18 +102,18 @@ namespace posixfio {
 
 		ArrayInputBuffer(ArrayInputBuffer&& mv):
 				file_(std::move(mv.file_)),
-				bufferOffset_(0),
-				bufferSize_(std::move(mv.bufferSize_))
+				bufferBegin_(0),
+				bufferEnd_(std::move(mv.bufferEnd_))
 		{
 			memcpy(buffer_,
 				mv.buffer_,
-				bufferSize_ - bufferOffset_ );
+				bufferEnd_ - bufferBegin_ );
 		}
 
 		ArrayInputBuffer(FileView file):
 				file_(std::move(file)),
-				bufferOffset_(0),
-				bufferSize_(0)
+				bufferBegin_(0),
+				bufferEnd_(0)
 		{ }
 
 		ArrayInputBuffer& operator=(ArrayInputBuffer&& mv) {
@@ -122,13 +124,35 @@ namespace posixfio {
 		const FileView file() const { return file_; }
 
 		ssize_t read(void* buf, size_t count) {
-			return buffer_op::bfRead(file_, buffer_, &bufferOffset_, &bufferSize_, capacity, buf, count);
+			return buffer_op::bfRead(file_, buffer_, &bufferBegin_, &bufferEnd_, capacity, buf, count);
 		}
 
-		void discard() {
-			bufferOffset_ = 0;
-			bufferSize_ = 0;
+		ssize_t fill() {
+			if(bufferEnd_ < capacity) {
+				ssize_t rd = file_.read(buffer_ + bufferEnd_, capacity - bufferEnd_);
+				if(rd >= 0) [[likely]]  bufferEnd_ += rd;
+				return rd;
+			} else {
+				return 0;
+			}
 		}
+
+		inline void discard() { bufferBegin_ = 0;  bufferEnd_ = 0; }
+
+		ssize_t fwd() {
+			if(bufferBegin_ + 1 >= bufferEnd_) {
+				if(bufferEnd_ >= capacity)  discard();
+				ssize_t fl = fill();
+				if(fl <= 0)  return fl;
+			} else {
+				++ bufferBegin_;
+			}
+			return 1;
+		}
+
+		inline byte_t* data() { return buffer_ + bufferBegin_; }
+		inline const byte_t* data() const { return buffer_ + bufferBegin_; }
+		inline size_t size() const { return bufferEnd_ - bufferBegin_; }
 	};
 
 
@@ -136,8 +160,8 @@ namespace posixfio {
 	class ArrayOutputBuffer {
 	private:
 		FileView file_;
-		size_t bufferOffset_;
-		size_t bufferSize_;
+		size_t bufferBegin_;
+		size_t bufferEnd_;
 		byte_t buffer_[capacity];
 
 	public:
@@ -146,24 +170,24 @@ namespace posixfio {
 
 		ArrayOutputBuffer(ArrayOutputBuffer&& mv):
 				file_(std::move(mv.file_)),
-				bufferOffset_(0),
-				bufferSize_(std::move(mv.bufferSize_))
+				bufferBegin_(0),
+				bufferEnd_(std::move(mv.bufferEnd_))
 		{
-			memcpy(buffer_, mv.buffer_, bufferSize_);
+			memcpy(buffer_, mv.buffer_, bufferEnd_);
 		}
 
 		ArrayOutputBuffer(FileView file):
 				file_(std::move(file)),
-				bufferOffset_(0),
-				bufferSize_(0)
+				bufferBegin_(0),
+				bufferEnd_(0)
 		{ }
 
 		~ArrayOutputBuffer() {
 			if(file_) {
-				if(bufferSize_ > bufferOffset_) {
+				if(bufferEnd_ > bufferBegin_) {
 					writeAll(file_,
-						reinterpret_cast<byte_t*>(buffer_) + bufferOffset_,
-						bufferSize_ - bufferOffset_ );
+						reinterpret_cast<byte_t*>(buffer_) + bufferBegin_,
+						bufferEnd_ - bufferBegin_ );
 				}
 			}
 		}
@@ -176,13 +200,13 @@ namespace posixfio {
 		const FileView file() const { return file_; }
 
 		ssize_t write(const void* buf, size_t count) {
-			return buffer_op::bfWrite(file_, buffer_, &bufferOffset_, &bufferSize_, capacity, buf, count);
+			return buffer_op::bfWrite(file_, buffer_, &bufferBegin_, &bufferEnd_, capacity, buf, count);
 		}
 
 		void flush() {
 			writeAll(file_,
-				reinterpret_cast<byte_t*>(buffer_) + bufferOffset_,
-				bufferSize_ - bufferOffset_ );
+				reinterpret_cast<byte_t*>(buffer_) + bufferBegin_,
+				bufferEnd_ - bufferBegin_ );
 		}
 	};
 

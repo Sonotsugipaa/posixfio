@@ -1,4 +1,4 @@
-#include "posixfio_tl.hpp"
+#include "../include/posixfio_tl.hpp"
 
 #include <cerrno>
 #include <cassert>
@@ -24,25 +24,24 @@ namespace posixfio {
 
 		ssize_t bfRead(
 				FileView file,
-				void* buf, size_t* bufOffsetPtr, size_t* bufSizePtr, size_t bufCapacity,
+				void* buf, size_t* bufBeginPtr, size_t* bufEndPtr, size_t bufCapacity,
 				void* dst, size_t count
 		) {
-			//         | ...... | DataDataDataDataDataDa | ........................... |
-			// Layout: | offset | window = size - offset | available = capacity - size |
-			// All bytes before `offset` have already been read
-			// All bytes between `offset` and `size` are queued to be read
+			//         | ..... | DataDataDataDataData | .......................... |
+			// Layout: | begin | window = end - begin | available = capacity - end |
+			// All bytes before `begin` have already been read
+			// All bytes between `begin` and `end` are queued to be read
 			#define BYTES_(PTR_) reinterpret_cast<byte_t*>(PTR_)
 			assert(buf);
-			assert(bufSizePtr);
-			assert(bufSizePtr);
-			assert(bufOffsetPtr);
-			auto initBufSize = *bufSizePtr;
-			auto initBufOff = *bufOffsetPtr;
+			assert(bufEndPtr);
+			assert(bufBeginPtr);
+			auto initBufSize = *bufEndPtr;
+			auto initBufOff = *bufBeginPtr;
 			auto initWindowSize = initBufSize - initBufOff;  assert(initBufSize >= initBufOff);
 			if(count < initWindowSize) {
 				// Enough available bytes
 				memcpy(dst, BYTES_(buf) + initBufOff, count);
-				*bufOffsetPtr += count;
+				*bufBeginPtr += count;
 				return count;
 			} else {
 				/* Can optimize here:
@@ -61,8 +60,8 @@ namespace posixfio {
 				#endif
 				ssize_t rd = file.read(BYTES_(dst) + initWindowSize, directRdCount);
 				CHECK_ERR_
-				*bufOffsetPtr = 0;
-				*bufSizePtr = 0;
+				*bufBeginPtr = 0;
+				*bufEndPtr = 0;
 				#undef CHECK_ERR_
 				return rd + initWindowSize;
 			}
@@ -71,27 +70,26 @@ namespace posixfio {
 
 		ssize_t bfWrite(
 				FileView file,
-				void* buf, size_t* bufOffsetPtr, size_t* bufSizePtr, size_t bufCapacity,
+				void* buf, size_t* bufBeginPtr, size_t* bufEndPtr, size_t bufCapacity,
 				const void* src, size_t count
 		) {
-			//         | ...... | DataDataDataDataDataDa | ........................... |
-			// Layout: | offset | window = size - offset | available = capacity - size |
-			// All bytes before `offset` are already written
-			// All bytes between `offset` and `size` are queued to be written
+			//         | ..... | DataDataDataDataData | .......................... |
+			// Layout: | begin | window = end - begin | available = capacity - end |
+			// All bytes before `begin` are already written
+			// All bytes between `begin` and `end` are queued to be written
 			#define BYTES_(PTR_) reinterpret_cast<byte_t*>(PTR_)
 			#define CBYTES_(PTR_) reinterpret_cast<const byte_t*>(PTR_)
 			assert(buf);
-			assert(bufSizePtr);
-			assert(bufSizePtr);
-			assert(bufOffsetPtr);
-			auto initBufSize = *bufSizePtr;
-			auto initBufOff = *bufOffsetPtr;
+			assert(bufEndPtr);
+			assert(bufBeginPtr);
+			auto initBufSize = *bufEndPtr;
+			auto initBufOff = *bufBeginPtr;
 			assert(initBufSize >= initBufOff);
 			auto initAvailSpace = bufCapacity - initBufSize;
 			if(count <= initAvailSpace) {
 				// Enough available space in the buffer
 				memcpy(BYTES_(buf) + initBufSize, src, count);
-				*bufSizePtr += count;
+				*bufEndPtr += count;
 				return count;
 			} else {
 				/* Can optimize here:
@@ -121,8 +119,8 @@ namespace posixfio {
 				wr = file.write(CBYTES_(src) + bufferedWrCount, directWrCount);
 				CHECK_ERR_
 				assert(size_t(wr) <= directWrCount);
-				*bufOffsetPtr = 0;
-				*bufSizePtr = 0;
+				*bufBeginPtr = 0;
+				*bufEndPtr = 0;
 				#undef CHECK_ERR_
 				return wr + bufferedWrCount;
 			}
@@ -189,11 +187,10 @@ namespace posixfio {
 			#define MV_(MEMBER_) MEMBER_(std::move(mv.MEMBER_))
 			#define CP_(MEMBER_) MEMBER_(mv.MEMBER_)
 				MV_(file_),
-				CP_(offset_),
-				CP_(size_),
+				CP_(begin_),
+				CP_(end_),
 				CP_(capacity_),
-				CP_(buffer_),
-				CP_(direction_)
+				CP_(buffer_)
 			#undef MV_
 			#undef CP_
 	{
@@ -205,11 +202,10 @@ namespace posixfio {
 
 	InputBuffer::InputBuffer(FileView file, size_t cap):
 			file_(file),
-			offset_(0),
-			size_(0),
+			begin_(0),
+			end_(0),
 			capacity_(cap),
-			buffer_(new byte_t[cap]),
-			direction_(false)
+			buffer_(new byte_t[cap])
 	{
 		assert(capacity_ > 0);
 		if(capacity_ < 1) capacity_ = 1;
@@ -234,7 +230,30 @@ namespace posixfio {
 
 
 	ssize_t InputBuffer::read(void* userBuf, size_t count) {
-		return buffer_op::bfRead(file_, buffer_, &offset_, &size_, capacity_, userBuf, count);
+		return buffer_op::bfRead(file_, buffer_, &begin_, &end_, capacity_, userBuf, count);
+	}
+
+
+	ssize_t InputBuffer::fill() {
+		if(end_ < capacity_) {
+			ssize_t rd = file_.read(buffer_, capacity_ - end_);
+			if(rd > 0) end_ += rd;
+			return rd;
+		} else {
+			return 0;
+		}
+	}
+
+
+	ssize_t InputBuffer::fwd() {
+		if(begin_ + 1 >= end_) {
+			if(end_ >= capacity_)  discard();
+			ssize_t fl = fill();
+			if(fl <= 0) { return fl; }
+		} else {
+			++ begin_;
+		}
+		return 1;
 	}
 
 
@@ -251,11 +270,10 @@ namespace posixfio {
 			#define MV_(MEMBER_) MEMBER_(std::move(mv.MEMBER_))
 			#define CP_(MEMBER_) MEMBER_(mv.MEMBER_)
 				MV_(file_),
-				CP_(offset_),
-				CP_(size_),
+				CP_(begin_),
+				CP_(end_),
 				CP_(capacity_),
-				CP_(buffer_),
-				CP_(direction_)
+				CP_(buffer_)
 			#undef MV_
 			#undef CP_
 	{
@@ -267,11 +285,10 @@ namespace posixfio {
 
 	OutputBuffer::OutputBuffer(FileView file, size_t cap):
 			file_(file),
-			offset_(0),
-			size_(0),
+			begin_(0),
+			end_(0),
 			capacity_(cap),
-			buffer_(new byte_t[cap]),
-			direction_(false)
+			buffer_(new byte_t[cap])
 	{
 		assert(capacity_ > 0);
 		if(capacity_ < 1) capacity_ = 1;
@@ -280,8 +297,8 @@ namespace posixfio {
 
 	OutputBuffer::~OutputBuffer() {
 		if(file_) {
-			assert(size_ >= offset_);
-			if(size_ > offset_)  writeAll(file_, reinterpret_cast<byte_t*>(buffer_) + offset_, size_ - offset_);
+			assert(end_ >= begin_);
+			if(end_ > begin_)  writeAll(file_, reinterpret_cast<byte_t*>(buffer_) + begin_, end_ - begin_);
 			delete[] buffer_;
 			#ifndef NDEBUG
 				buffer_ = nullptr;
@@ -297,11 +314,11 @@ namespace posixfio {
 
 
 	ssize_t OutputBuffer::write(const void* userBuf, size_t count) {
-		return buffer_op::bfWrite(file_, buffer_, &offset_, &size_, capacity_, userBuf, count);
+		return buffer_op::bfWrite(file_, buffer_, &begin_, &end_, capacity_, userBuf, count);
 	}
 
 	void OutputBuffer::flush() {
-		writeAll(file_, reinterpret_cast<byte_t*>(buffer_) + offset_, size_ - offset_);
+		writeAll(file_, reinterpret_cast<byte_t*>(buffer_) + begin_, end_ - begin_);
 	}
 
 }

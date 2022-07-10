@@ -1,4 +1,4 @@
-#include "posixfio.hpp"
+#include "../../include/posixfio_tl.hpp"
 
 #include <cerrno>
 #include <cassert>
@@ -55,7 +55,7 @@ namespace posixfio {
 	File::File(File&& mv):
 			fd_(std::move(mv.fd_))
 	{
-		mv.fd_ = -1;
+		mv.fd_ = NULL_FD;
 	}
 
 

@@ -32,17 +32,18 @@ prepare() {
 build() {
 	cd "$pkgname-$pkgver"
 	unset srcpath # Set but not overridden by the build script
-	unset dstpath # ^ ditto
-	installpath="$pkgdir/usr" ./build.sh Release
+	dstpath="build-v$pkgver" \
+	installpath="$pkgdir/usr" \
+		./build.sh Release
 }
 
 check() {
-	cd "$pkgname-$pkgver/build-Release"
-	./posixfio-test
-	./posixfio-tl-test
+	cd "$pkgname-$pkgver"
+	"build-v$pkgver"/Release/posixfio-test
+	"build-v$pkgver"/Release/posixfio-tl-test
 }
 
 package() {
 	cd "$pkgname-$pkgver"
-	cmake --install build-Release
+	cmake --install "build-v$pkgver"/Release
 }
