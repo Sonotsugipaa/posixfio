@@ -26,8 +26,13 @@ namespace posixfio {
 	using byte_t = unsigned char;
 
 
+	/** Repeatedly reads data from the given FileView, until `count`
+	 * bytes have been read, EOF is reached or an error occurs. */
 	ssize_t readAll(FileView, void* buf, size_t count);
 
+
+	/** Repeatedly writes data to the given FileView, until `count`
+	 * bytes have been written or an error occurs. */
 	ssize_t writeAll(FileView, const void* buf, size_t count);
 
 
