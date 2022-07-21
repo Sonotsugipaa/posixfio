@@ -26,18 +26,26 @@ namespace posixfio {
 	using off_t = ssize_t;
 
 	// Class forward declarations
-	class Errno;
+	class Errcode;
 	class File;
 	class Pipe;
 	class FileView;
 
+	using Errno = Errcode;  // `errcode` replaces `errno`, since the latter is a macro
 
-	struct Errno {
-		int value;
 
-		constexpr Errno(int value): value(value) { }
-		constexpr ~Errno() { }
-		constexpr operator int() const { return value; }
+	struct Errcode {
+		int errcode;
+
+		constexpr Errcode(int errcode): errcode(errcode) { }
+		constexpr operator int() const { return errcode; }
+	};
+
+	struct FileError : public Errcode {
+		fd_t fd;
+
+		constexpr FileError(fd_t fd, int errcode): Errcode(errcode), fd(fd) { }
+		constexpr operator int() = delete;
 	};
 
 

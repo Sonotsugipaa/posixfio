@@ -1,6 +1,6 @@
 #include <test_tools.hpp>
 
-#include "posixfio.hpp"
+#include "../include/posixfio.hpp"
 
 #include <array>
 #include <iostream>
@@ -70,10 +70,25 @@ namespace {
 		try {
 			got = fn(out);
 		} catch(Errno& errNo) {
-			got = errNo.value;
+			got = errNo.errcode;
 		}
 		if(got != expect) {
 			out << "Expected errno " << errno_str(expect) << ", got " << errno_str(got) << std::endl;
+			return eFailure;
+		} else {
+			return eSuccess;
+		}
+	}
+
+	utest::ResultType requireFileError(std::ostream& out, int expect, int (*fn)(std::ostream& out)) {
+		int got;
+		try {
+			got = fn(out);
+		} catch(FileError& errNo) {
+			got = errNo.errcode;
+		}
+		if(got != expect) {
+			out << "Expected file error " << errno_str(expect) << ", got " << errno_str(got) << std::endl;
 			return eFailure;
 		} else {
 			return eSuccess;
@@ -308,6 +323,21 @@ namespace {
 	}
 
 
+	utest::ResultType fileerror_enoent(std::ostream& out) {
+		return requireFileError(out, ENOENT, [](std::ostream&) {
+			auto f = File::open(
+				"/\033No file named like this should ever exist in a filesystem's root dir",
+				O_RDONLY );
+			if(f) {
+				return 0;
+			} else {
+				int curErrno = errno;
+				errno = 0;
+				return curErrno;
+			}
+		});
+	}
+
 	utest::ResultType errno_enoent(std::ostream& out) {
 		return requireErrno(out, ENOENT, [](std::ostream&) {
 			auto f = File::open(
@@ -341,7 +371,10 @@ int main(int, char**) {
 		.run("Read file view", read_fileview);
 	batch
 		.run("Close file", close_file)
-		.run("Open file (ENOENT)", errno_enoent)
+		.run("Open file (ENOENT)", fileerror_enoent)
+		#ifndef POSIXFIO_NOTHROW
+			.run("Open file (ENOENT, legacy)", errno_enoent)
+		#endif
 		.run("Copy-construct file", copy_file)
 		.run("Copy-construct file view", copy_fileview);
 	return batch.failures() == 0? EXIT_SUCCESS : EXIT_FAILURE;

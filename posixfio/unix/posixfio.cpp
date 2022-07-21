@@ -12,28 +12,28 @@
 namespace posixfio {
 
 	#ifdef POSIXFIO_NOTHROW
-		#define POSIXFIO_THROWERRNO(DO_) DO_
+		#define POSIXFIO_THROWERRNO(FD_, DO_) DO_
 		namespace no_throw {
 	#else
-		#define POSIXFIO_THROWERRNO(DO_) throw Errno{errno}
+		#define POSIXFIO_THROWERRNO(FD_, DO_) throw FileError(FD_, errno)
 	#endif
 
 
 	File File::open(const char* pathname, int flags, posixfio::mode_t mode) {
 		File r = ::open(pathname, flags, mode);
-		if(! r) POSIXFIO_THROWERRNO((void) 0);
+		if(! r) POSIXFIO_THROWERRNO(NULL_FD, (void) 0);
 		return r;
 	}
 
 	File File::creat(const char* pathname, posixfio::mode_t mode) {
 		File r = ::creat(pathname, mode);
-		if(! r) POSIXFIO_THROWERRNO((void) 0);
+		if(! r) POSIXFIO_THROWERRNO(NULL_FD, (void) 0);
 		return r;
 	}
 
 	File File::openat(fd_t dirfd, const char* pathname, int flags, posixfio::mode_t mode) {
 		File r = ::openat(dirfd, pathname, flags, mode);
-		if(! r) POSIXFIO_THROWERRNO((void) 0);
+		if(! r) POSIXFIO_THROWERRNO(NULL_FD, (void) 0);
 		return r;
 	}
 
@@ -47,7 +47,7 @@ namespace posixfio {
 			fd_(::dup(cp.fd_))
 	{
 		#ifndef POSIXFIO_NOTHROW
-			if(fd_ < 0) POSIXFIO_THROWERRNO((void) 0);
+			if(fd_ < 0) POSIXFIO_THROWERRNO(fd_, (void) 0);
 		#endif
 	}
 
@@ -76,7 +76,7 @@ namespace posixfio {
 		if(fd_ >= 0) {
 			int r = ::close(fd_);
 			assert((r == 0) || (r == -1 /* POSIX indicates `-1` specifically */));
-			if(r < 0)  POSIXFIO_THROWERRNO(return false);
+			if(r < 0)  POSIXFIO_THROWERRNO(fd_, return false);
 			else  fd_ = NULL_FD;
 		}
 		return true;
@@ -109,7 +109,7 @@ namespace posixfio {
 
 	File File::dup2(fd_t newFd) const {
 		fd_t r = ::dup2(fd_, newFd);
-		if(r < 0) POSIXFIO_THROWERRNO(return File());
+		if(r < 0) POSIXFIO_THROWERRNO(fd_, return File());
 		return File(r);
 	}
 
@@ -117,7 +117,7 @@ namespace posixfio {
 	posixfio::ssize_t File::read(void* buf, size_t count) {
 		posixfio::ssize_t rd = ::read(fd_, buf, count);
 		if(rd < 0) {
-			POSIXFIO_THROWERRNO(return rd);
+			POSIXFIO_THROWERRNO(fd_, return rd);
 		}
 		return rd;
 	}
@@ -125,7 +125,7 @@ namespace posixfio {
 	posixfio::ssize_t File::write(const void* buf, size_t count) {
 		posixfio::ssize_t wr = ::write(fd_, buf, count);
 		if(wr < 0) {
-			POSIXFIO_THROWERRNO(return wr);
+			POSIXFIO_THROWERRNO(fd_, return wr);
 		}
 		return wr;
 	}
@@ -134,7 +134,7 @@ namespace posixfio {
 	off_t File::lseek(off_t offset, int whence) {
 		posixfio::ssize_t seek = ::lseek(fd_, offset, whence);
 		if(seek < 0) {
-			POSIXFIO_THROWERRNO((void) 0);
+			POSIXFIO_THROWERRNO(fd_, (void) 0);
 		}
 		return seek;
 	}
@@ -144,7 +144,7 @@ namespace posixfio {
 		int trunc = ::ftruncate(fd_, length);
 		assert(trunc == 0 || trunc == -1);
 		if(trunc < 0) {
-			POSIXFIO_THROWERRNO((void) 0);
+			POSIXFIO_THROWERRNO(fd_, (void) 0);
 		}
 		return trunc;
 	}
@@ -154,7 +154,7 @@ namespace posixfio {
 		int res = ::fsync(fd_);
 		assert(res == 0 || res == -1);
 		if(res < 0) {
-			POSIXFIO_THROWERRNO((void) 0);
+			POSIXFIO_THROWERRNO(fd_, (void) 0);
 		}
 		return res;
 	}
@@ -164,7 +164,7 @@ namespace posixfio {
 		int res = ::fdatasync(fd_);
 		assert(res == 0 || res == -1);
 		if(res < 0) {
-			POSIXFIO_THROWERRNO((void) 0);
+			POSIXFIO_THROWERRNO(fd_, (void) 0);
 		}
 		return res;
 	}
@@ -176,7 +176,7 @@ namespace posixfio {
 		auto result = pipe(fd);
 		assert(result == 0 || result == -1);
 		if(result < 0) {
-			POSIXFIO_THROWERRNO((void) 0);
+			POSIXFIO_THROWERRNO(File::NULL_FD, (void) 0);
 		} else {
 			r.rd = fd[0];
 			r.wr = fd[1];

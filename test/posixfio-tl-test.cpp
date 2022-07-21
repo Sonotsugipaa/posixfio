@@ -94,7 +94,7 @@ namespace {
 		#undef ERRNO_CASE2_
 	}
 
-	#define CATCH_ERRNO_(OS_) catch(Errno& errNo) { OS_ << "ERRNO " << errno_str(errNo.value) << ' ' << errNo.value << std::endl; }
+	#define CATCH_ERRNO_(OS_) catch(Errno& errNo) { OS_ << "ERRNO " << errno_str(errNo.errcode) << ' ' << errNo.errcode << std::endl; }
 
 
 	utest::ResultType requireErrno(std::ostream& out, int expect, int (*fn)(std::ostream& out)) {
@@ -102,10 +102,25 @@ namespace {
 		try {
 			got = fn(out);
 		} catch(Errno& errNo) {
-			got = errNo.value;
+			got = errNo.errcode;
 		}
 		if(got != expect) {
 			out << "Expected errno " << errno_str(expect) << ", got " << errno_str(got) << std::endl;
+			return eFailure;
+		} else {
+			return eSuccess;
+		}
+	}
+
+	utest::ResultType requireFileError(std::ostream& out, int expect, int (*fn)(std::ostream& out)) {
+		int got;
+		try {
+			got = fn(out);
+		} catch(FileError& err) {
+			got = err.errcode;
+		}
+		if(got != expect) {
+			out << "Expected file error " << errno_str(expect) << ", got " << errno_str(got) << std::endl;
 			return eFailure;
 		} else {
 			return eSuccess;
@@ -245,12 +260,29 @@ namespace {
 	}
 
 
-	utest::ResultType errno_file_ebadf(std::ostream& out) {
-		return requireErrno(out, EBADF, [](std::ostream& out) {
+	utest::ResultType fileerror_file_ebadf(std::ostream& out) {
+		return requireFileError(out, EBADF, [](std::ostream& out) {
 			auto f = File::open(tmpFile.c_str(), O_RDONLY | O_CREAT);
 			ssize_t wr = f.write(tmpFile.c_str(), 1); // Can't write to a RDONLY file
 			switch(wr) {
 				case 0:  out << "CRITICAL: write(..., 1) returned 0" << std::endl;  return -1;
+				case 1:  return 0;
+				default:  {
+					int curErrno = errno;
+					errno = 0;
+					return curErrno;
+				}
+			}
+		});
+	}
+
+	utest::ResultType fileerror_buffer_ebadf(std::ostream& out) {
+		return requireFileError(out, EBADF, [](std::ostream& out) {
+			auto f = File::open(tmpFile.c_str(), O_WRONLY | O_CREAT);
+			auto fb = posixfio::InputBuffer(f, 1);
+			ssize_t rd = fb.fwd(); // Can't read from a WRONLY file
+			switch(rd) {
+				case 0:  out << "CRITICAL: fwd() returned 0" << std::endl;  return -1;
 				case 1:  return 0;
 				default:  {
 					int curErrno = errno;
@@ -328,7 +360,10 @@ namespace {
 int main(int, char**) {
 	auto batch = utest::TestBatch(std::cout);
 	testPayloads<220, 2000, 2048, 2500>(batch);
-	batch.run("Write read-only file   (EBADF)", errno_file_ebadf);
-	batch.run("Read write-only buffer (EBADF)", errno_buffer_ebadf);
+	batch.run("Write read-only file   (EBADF)", fileerror_file_ebadf);
+	batch.run("Read write-only buffer (EBADF)", fileerror_buffer_ebadf);
+	#ifndef POSIXFIO_NOTHROW
+		batch.run("Read write-only buffer (EBADF, legacy)", errno_buffer_ebadf);
+	#endif
 	return batch.failures() == 0? EXIT_SUCCESS : EXIT_FAILURE;
 }
