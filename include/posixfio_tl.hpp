@@ -12,8 +12,8 @@ namespace posixfio {
 
 	namespace buffer_op {
 
-		/* Functions in this namespace are only to be used by this library,
-		 * and their signatures may change at any time in any way.
+		/* This namespace is only to be used by this library,
+		 * and its signatures may change at any time in any way.
 		 * */
 
 		ssize_t bfRead(FileView, void* buf, size_t* bufBegPtr, size_t* bufEndPtr, size_t bufCapacity, void* dst, size_t count);
@@ -55,14 +55,26 @@ namespace posixfio {
 
 		inline const FileView file() const { return file_; }
 
+		/** Similar to File::read, but may fail after a partial read. */
 		ssize_t read(void* buf, size_t count);
 
+		/** Try to fill the buffer, if it isn't already full. */
 		ssize_t fill();
+
+		/** If the buffer is empty, try to fill it; then discard one byte.
+		 * The return value follows File::read semantics. */
 		ssize_t fwd();
+
+		/** Returns a pointer to the first ready-to-read byte in the buffer. */
 		inline byte_t* data() { return buffer_ + begin_; }
+
+		/** Returns a pointer to the first ready-to-read byte in the buffer. */
 		inline const byte_t* data() const { return buffer_ + begin_; }
+
+		/** Returns the number of ready-to-read bytes. */
 		inline size_t size() const { return end_ - begin_; }
 
+		/** Discard the entire buffer; the next read will try to fill the buffer. */
 		inline void discard() { begin_ = 0;  end_ = 0; }
 	};
 
@@ -86,8 +98,10 @@ namespace posixfio {
 
 		inline const FileView file() const { return file_; }
 
+		/** Similar to File::write, but may fail after a partial write. */
 		ssize_t write(const void* buf, size_t count);
 
+		/** Write all the ready-to-write bytes. */
 		void flush();
 	};
 
@@ -128,10 +142,12 @@ namespace posixfio {
 
 		const FileView file() const { return file_; }
 
+		/** Similar to File::read, but may fail after a partial read. */
 		ssize_t read(void* buf, size_t count) {
 			return buffer_op::bfRead(file_, buffer_, &bufferBegin_, &bufferEnd_, capacity, buf, count);
 		}
 
+		/** Try to fill the buffer, if it isn't already full. */
 		ssize_t fill() {
 			if(bufferEnd_ < capacity) {
 				ssize_t rd = file_.read(buffer_ + bufferEnd_, capacity - bufferEnd_);
@@ -142,8 +158,11 @@ namespace posixfio {
 			}
 		}
 
+		/** Discard the entire buffer; the next read will try to fill the buffer. */
 		inline void discard() { bufferBegin_ = 0;  bufferEnd_ = 0; }
 
+		/** If the buffer is empty, try to fill it; then discard one byte.
+		 * The return value follows File::read semantics. */
 		ssize_t fwd() {
 			if(bufferBegin_ + 1 >= bufferEnd_) {
 				if(bufferEnd_ >= capacity)  discard();
@@ -155,8 +174,13 @@ namespace posixfio {
 			return 1;
 		}
 
+		/** Returns a pointer to the first ready-to-read byte in the buffer. */
 		inline byte_t* data() { return buffer_ + bufferBegin_; }
+
+		/** Returns a pointer to the first ready-to-read byte in the buffer. */
 		inline const byte_t* data() const { return buffer_ + bufferBegin_; }
+
+		/** Returns the number of ready-to-read bytes. */
 		inline size_t size() const { return bufferEnd_ - bufferBegin_; }
 	};
 
@@ -204,10 +228,12 @@ namespace posixfio {
 
 		const FileView file() const { return file_; }
 
+		/** Similar to File::write, but may fail after a partial write. */
 		ssize_t write(const void* buf, size_t count) {
 			return buffer_op::bfWrite(file_, buffer_, &bufferBegin_, &bufferEnd_, capacity, buf, count);
 		}
 
+		/** Write all the ready-to-write bytes. */
 		void flush() {
 			writeAll(file_,
 				reinterpret_cast<byte_t*>(buffer_) + bufferBegin_,
