@@ -24,7 +24,7 @@ namespace posixfio {
 
 		ssize_t bfRead(
 				FileView file,
-				void* buf, size_t* bufBeginPtr, size_t* bufEndPtr, size_t bufCapacity,
+				void* buf, size_t* bufBeginPtr, size_t* bufEndPtr,
 				void* dst, size_t count
 		) {
 			//         | ..... | DataDataDataDataData | .......................... |
@@ -44,10 +44,6 @@ namespace posixfio {
 				*bufBeginPtr += count;
 				return count;
 			} else {
-				/* Can optimize here:
-				 * read into the buffer once, in order to avoid unnecessarily small reads;
-				 * not more than once, to avoid unnecesary buffering.
-				 * */ (void) bufCapacity;
 				#ifdef POSIXFIO_NOTHROW
 					#define CHECK_ERR_ { if(rd < 0) [[unlikely]] { return rd; } }
 				#else
@@ -92,10 +88,6 @@ namespace posixfio {
 				*bufEndPtr += count;
 				return count;
 			} else {
-				/* Can optimize here:
-				 * write the buffer once, in order to avoid unnecessarily small writes;
-				 * not more than once, to avoid unnecesary buffering.
-				 * */
 				#ifdef POSIXFIO_NOTHROW
 					#define CHECK_ERR_ { assert(wr != 0);  if(wr < 0) [[unlikely]] { return wr; } }
 				#else
@@ -107,9 +99,9 @@ namespace posixfio {
 				ssize_t wr;
 				if(bufferedWrCount > 0) {
 					memcpy(BYTES_(buf) + initBufSize, src, initAvailSpace);
-					wr = writeAll(file,
+					wr = writeLeast(file,
 						BYTES_(buf) + initBufOff,
-						bufferedWrCount );
+						1, bufferedWrCount );
 					CHECK_ERR_
 					assert(size_t(wr) == bufferedWrCount);
 				}
@@ -153,6 +145,37 @@ namespace posixfio {
 	}
 
 
+	ssize_t readLeast(FileView file, void* buf, size_t least, size_t count) {
+		#define BYTES_(PTR_) reinterpret_cast<byte_t*>(PTR_)
+		{ // Ensure that `least` <= `count`
+			#ifdef NDEBUG
+				least = std::min(least, count);
+			#else
+				assert(least <= count);
+			#endif
+		}
+		const auto initCount = count;
+		ssize_t rd = 1 /* Must be != 0 */;
+		while(least > 0 && rd > 0) {
+			rd = file.read(buf, count);
+			#ifdef POSIXFIO_NOTHROW
+				if(rd < 0) return rd;
+			#else
+				assert(rd >= 0);
+			#endif
+			{
+				auto uRd = size_t(rd);
+				assert(count >= uRd);
+				buf = BYTES_(buf) + rd;
+				count -= uRd;
+				least = std::max<ssize_t>(0, least - uRd);
+			}
+		}
+		return initCount - count;
+		#undef BYTES_
+	}
+
+
 	ssize_t writeAll(FileView file, const void* buf, size_t count) {
 		#define CBYTES_(PTR_) reinterpret_cast<const byte_t*>(PTR_)
 		const auto initCount = count;
@@ -169,6 +192,38 @@ namespace posixfio {
 			count -= size_t(wr);
 		}
 		assert(count == 0); // It's cargo cult programming at this point, BUT it is VERY important and critical for this function to COMPLETELY write the buffer if no IO error occurs.
+		return initCount;
+		#undef CBYTES_
+	}
+
+
+	ssize_t writeLeast(FileView file, const void* buf, size_t least, size_t count) {
+		#define CBYTES_(PTR_) reinterpret_cast<const byte_t*>(PTR_)
+		{ // Ensure that `least` <= `count`
+			#ifdef NDEBUG
+				least = std::min(least, count);
+			#else
+				assert(least <= count);
+			#endif
+		}
+		const auto initCount = count;
+		while(least > 0) {
+			ssize_t wr = file.write(buf, count);
+			#ifdef POSIXFIO_NOTHROW
+				assert(wr != 0);
+				if(wr < 0) return wr;
+			#else
+				assert(wr > 0);
+			#endif
+			{
+				auto uWr = size_t(wr);
+				assert(count >= uWr);
+				buf = CBYTES_(buf) + wr;
+				count -= uWr;
+				least = std::max<ssize_t>(0, least - uWr);
+			}
+		}
+		assert(count == 0);
 		return initCount;
 		#undef CBYTES_
 	}
@@ -230,7 +285,7 @@ namespace posixfio {
 
 
 	ssize_t InputBuffer::read(void* userBuf, size_t count) {
-		return buffer_op::bfRead(file_, buffer_, &begin_, &end_, capacity_, userBuf, count);
+		return buffer_op::bfRead(file_, buffer_, &begin_, &end_, userBuf, count);
 	}
 
 

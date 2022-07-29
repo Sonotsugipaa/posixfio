@@ -12,11 +12,11 @@ namespace posixfio {
 
 	namespace buffer_op {
 
-		/* This namespace is only to be used by this library,
+		/* This namespace is only to be used internally by this library,
 		 * and its signatures may change at any time in any way.
 		 * */
 
-		ssize_t bfRead(FileView, void* buf, size_t* bufBegPtr, size_t* bufEndPtr, size_t bufCapacity, void* dst, size_t count);
+		ssize_t bfRead(FileView, void* buf, size_t* bufBegPtr, size_t* bufEndPtr, void* dst, size_t count);
 		ssize_t bfWrite(FileView, void* buf, size_t* bufBegPtr, size_t* bufEndPtr, size_t bufCapacity, const void* src, size_t count);
 
 	};
@@ -30,10 +30,20 @@ namespace posixfio {
 	 * bytes have been read, EOF is reached or an error occurs. */
 	ssize_t readAll(FileView, void* buf, size_t count);
 
+	/** Repeatedly reads data from the given FileView, until more than
+	 * `least` and less than `count+1` bytes have been read,
+	 * EOF is reached or an error occurs. */
+	ssize_t readLeast(FileView, void* buf, size_t least, size_t count);
+
 
 	/** Repeatedly writes data to the given FileView, until `count`
 	 * bytes have been written or an error occurs. */
 	ssize_t writeAll(FileView, const void* buf, size_t count);
+
+	/** Repeatedly writes data to the given FileView, until more than
+	 * `least` and less than `count+1` bytes have been written
+	 * bytes have been written or an error occurs. */
+	ssize_t writeLeast(FileView, const void* buf, size_t least, size_t count);
 
 
 	class InputBuffer {
@@ -144,7 +154,7 @@ namespace posixfio {
 
 		/** Similar to File::read, but may fail after a partial read. */
 		ssize_t read(void* buf, size_t count) {
-			return buffer_op::bfRead(file_, buffer_, &bufferBegin_, &bufferEnd_, capacity, buf, count);
+			return buffer_op::bfRead(file_, buffer_, &bufferBegin_, &bufferEnd_, buf, count);
 		}
 
 		/** Try to fill the buffer, if it isn't already full. */
