@@ -12,9 +12,14 @@
 	set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
 	set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
 
-	include_directories(include)
 	link_directories(lib)
 	link_directories(bin)
+
+	if(UNIX)
+		include_directories(include/unix)
+	elseif(WIN32)
+		include_directories(include/win32)
+	endif()
 
 
 # Set warning levels

@@ -1,0 +1,25 @@
+# CMake build directories, as created by ./build.sh
+/build-*/
+
+# Any hidden file
+/.*/
+/.*
+
+# ... except .gitignore
+!/.gitignore
+
+# Locally stored external dependencies
+/lib/
+/bin/
+
+# Headers from external dependencies may be located
+# in `/include/`, so project-specific ones must be
+# individually un-ignored here
+/include/*
+!/include/unix
+!/include/win32
+
+# Include the PKGBUILD file from archlinux/, but none
+# of the temporary files it creates.
+/archlinux/*
+!/archlinux/PKGBUILD

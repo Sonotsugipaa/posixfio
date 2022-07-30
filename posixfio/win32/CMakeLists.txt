@@ -12,6 +12,6 @@ set_target_properties(
 
 install(TARGETS posixfio DESTINATION lib)
 install(FILES
-	"${CMAKE_SOURCE_DIR}/include/posixfio.hpp"
-	"${CMAKE_SOURCE_DIR}/include/posixfio_tl.hpp"
+	"${CMAKE_SOURCE_DIR}/include/win32/posixfio.hpp"
+	"${CMAKE_SOURCE_DIR}/include/win32/posixfio_tl.hpp"
 	DESTINATION include )
