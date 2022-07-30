@@ -12,8 +12,10 @@
 
 // Use the next two lines to limit I/O request sizes, ONLY FOR DEBUGGING OR MANUAL TESTING;
 // use the third one to remind yourself of the former.
-//#define POSIXFIO_DBG_LIMIT_RD 421
-//#define POSIXFIO_DBG_LIMIT_WR 397
+//#define POSIXFIO_DBG_LIMIT_DIRECT_RD 2041
+//#define POSIXFIO_DBG_LIMIT_DIRECT_WR 2042
+//#define POSIXFIO_DBG_LIMIT_LEAST_RD 2031
+//#define POSIXFIO_DBG_LIMIT_LEAST_WR 2032
 //#pragma message "Temporary I/O limits have been enabled in \"" __FILE__ "\""
 
 
@@ -35,12 +37,12 @@ namespace posixfio {
 			assert(buf);
 			assert(bufEndPtr);
 			assert(bufBeginPtr);
-			auto initBufSize = *bufEndPtr;
-			auto initBufOff = *bufBeginPtr;
-			auto initWindowSize = initBufSize - initBufOff;  assert(initBufSize >= initBufOff);
+			auto initBufEnd = *bufEndPtr;
+			auto initBufBegin = *bufBeginPtr;
+			auto initWindowSize = initBufEnd - initBufBegin;  assert(initBufEnd >= initBufBegin);
 			if(count < initWindowSize) {
 				// Enough available bytes
-				memcpy(dst, BYTES_(buf) + initBufOff, count);
+				memcpy(dst, BYTES_(buf) + initBufBegin, count);
 				*bufBeginPtr += count;
 				return count;
 			} else {
@@ -50,9 +52,9 @@ namespace posixfio {
 					#define CHECK_ERR_ { assert(rd >= 0); }
 				#endif
 				size_t directRdCount = count - initWindowSize;
-				memcpy(dst, BYTES_(buf) + initBufOff, initWindowSize);
-				#ifdef POSIXFIO_DBG_LIMIT_RD
-					directRdCount = std::min(directRdCount, decltype(directRdCount)(POSIXFIO_DBG_LIMIT_RD));
+				memcpy(dst, BYTES_(buf) + initBufBegin, initWindowSize);
+				#ifdef POSIXFIO_DBG_LIMIT_DIRECT_RD
+					directRdCount = std::min(directRdCount, decltype(directRdCount)(POSIXFIO_DBG_LIMIT_DIRECT_RD));
 				#endif
 				ssize_t rd = file.read(BYTES_(dst) + initWindowSize, directRdCount);
 				CHECK_ERR_
@@ -78,13 +80,13 @@ namespace posixfio {
 			assert(buf);
 			assert(bufEndPtr);
 			assert(bufBeginPtr);
-			auto initBufSize = *bufEndPtr;
-			auto initBufOff = *bufBeginPtr;
-			assert(initBufSize >= initBufOff);
-			auto initAvailSpace = bufCapacity - initBufSize;
+			const auto initBufEnd = *bufEndPtr;
+			const auto initBufBegin = *bufBeginPtr;
+			assert(initBufEnd >= initBufBegin);
+			const auto initAvailSpace = bufCapacity - initBufEnd;
 			if(count <= initAvailSpace) {
 				// Enough available space in the buffer
-				memcpy(BYTES_(buf) + initBufSize, src, count);
+				memcpy(BYTES_(buf) + initBufEnd, src, count);
 				*bufEndPtr += count;
 				return count;
 			} else {
@@ -93,28 +95,39 @@ namespace posixfio {
 				#else
 					#define CHECK_ERR_ { assert(wr > 0); }
 				#endif
-				size_t bufferedWrCount = bufCapacity - initBufOff;
+				size_t bufferedWrCount = bufCapacity - initBufBegin;
 				size_t directWrCount = count - bufferedWrCount;
 				assert(bufferedWrCount + directWrCount == count);
 				ssize_t wr;
 				if(bufferedWrCount > 0) {
-					memcpy(BYTES_(buf) + initBufSize, src, initAvailSpace);
+					memcpy(BYTES_(buf) + initBufEnd, src, initAvailSpace);
 					wr = writeLeast(file,
-						BYTES_(buf) + initBufOff,
+						BYTES_(buf) + initBufBegin,
 						1, bufferedWrCount );
 					CHECK_ERR_
-					assert(size_t(wr) == bufferedWrCount);
+					assert(size_t(wr) <= bufferedWrCount);
 				}
-				#ifdef POSIXFIO_DBG_LIMIT_WR
-					directWrCount = std::min(directWrCount, decltype(directWrCount)(POSIXFIO_DBG_LIMIT_WR));
-				#endif
-				wr = file.write(CBYTES_(src) + bufferedWrCount, directWrCount);
-				CHECK_ERR_
-				assert(size_t(wr) <= directWrCount);
-				*bufBeginPtr = 0;
-				*bufEndPtr = 0;
+				if(size_t(wr) < bufferedWrCount) {
+					size_t shift = initBufBegin + wr;
+					size_t newBufEnd = bufCapacity - shift;
+					assert(bufCapacity > shift);
+					memmove(buf, BYTES_(buf) + shift, newBufEnd);
+					*bufBeginPtr = 0;
+					*bufEndPtr = newBufEnd;
+					assert(newBufEnd >= initBufEnd);
+					return wr + (newBufEnd - initBufEnd);
+				} else {
+					#ifdef POSIXFIO_DBG_LIMIT_DIRECT_WR
+						directWrCount = std::min(directWrCount, decltype(directWrCount)(POSIXFIO_DBG_LIMIT_DIRECT_WR));
+					#endif
+					wr = file.write(CBYTES_(src) + bufferedWrCount, directWrCount);
+					CHECK_ERR_
+					assert(size_t(wr) <= directWrCount);
+					*bufBeginPtr = 0;
+					*bufEndPtr = 0;
+					return wr + bufferedWrCount;
+				}
 				#undef CHECK_ERR_
-				return wr + bufferedWrCount;
 			}
 
 			#undef BYTES_
@@ -147,6 +160,9 @@ namespace posixfio {
 
 	ssize_t readLeast(FileView file, void* buf, size_t least, size_t count) {
 		#define BYTES_(PTR_) reinterpret_cast<byte_t*>(PTR_)
+		#ifdef POSIXFIO_DBG_LIMIT_LEAST_RD
+			count = std::min<size_t>(count, POSIXFIO_DBG_LIMIT_LEAST_RD);
+		#endif
 		{ // Ensure that `least` <= `count`
 			#ifdef NDEBUG
 				least = std::min(least, count);
@@ -199,6 +215,9 @@ namespace posixfio {
 
 	ssize_t writeLeast(FileView file, const void* buf, size_t least, size_t count) {
 		#define CBYTES_(PTR_) reinterpret_cast<const byte_t*>(PTR_)
+		#ifdef POSIXFIO_DBG_LIMIT_LEAST_WR
+			count = std::min<size_t>(count, POSIXFIO_DBG_LIMIT_LEAST_WR);
+		#endif
 		{ // Ensure that `least` <= `count`
 			#ifdef NDEBUG
 				least = std::min(least, count);
@@ -220,11 +239,11 @@ namespace posixfio {
 				assert(count >= uWr);
 				buf = CBYTES_(buf) + wr;
 				count -= uWr;
-				least = std::max<ssize_t>(0, least - uWr);
+				least = std::max<ssize_t>(0, ssize_t(least) - wr);
 			}
 		}
 		assert(count == 0);
-		return initCount;
+		return initCount - count;
 		#undef CBYTES_
 	}
 

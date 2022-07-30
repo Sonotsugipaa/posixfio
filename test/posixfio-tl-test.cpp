@@ -24,8 +24,6 @@ namespace {
 
 	std::string ioPayload;
 
-	#define IO_PAYLOAD_BUFFER_(NAME_) std::string NAME_; NAME_.resize(ioPayload.size());
-
 
 	#ifdef POSIXFIO_NOTHROW
 		ssize_t alwaysThrowErr(ssize_t result) {
@@ -129,11 +127,12 @@ namespace {
 
 
 	std::string mkPayload(size_t payloadSize) {
-		static decltype(payloadSize) state = 0;
+		static const std::string_view charset = "abcdefghi1234567890\n ";
+		static decltype(payloadSize) state = 2;
 		std::string r;  r.reserve(payloadSize);
-		auto rng = std::minstd_rand(state = (payloadSize ^ state));
+		auto rng = std::minstd_rand(state += payloadSize);
 		for(size_t i=0; i < payloadSize; ++i) {
-			r.push_back(char(rng()));
+			r.push_back(charset[rng() % charset.size()]);
 		}
 		return r;
 	}
@@ -179,10 +178,10 @@ namespace {
 				size_t cursor = 0;
 				#define WR_ { wr = alwaysThrowErr(buf.write(ioPayload.data() + cursor, count));  assert(wr > 0);  count -= wr;  cursor += wr; }
 				WR_
-				if(wr != 0 && count > 0) {
+				if(count > 0) {
 					out << "Partial write of " << wr << '/' << ioPayload.size() << " bytes" << std::endl;
 				}
-				while(wr != 0 && count > 0) {
+				while(count > 0) {
 					WR_
 					out << "Partial write of " << wr << '/' << ioPayload.size() << " bytes" << std::endl;
 				}

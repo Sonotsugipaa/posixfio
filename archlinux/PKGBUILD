@@ -8,7 +8,7 @@
 # it follows the AUR guidelines.
 
 pkgname=posixfio
-pkgver=0.2.4
+pkgver=0.2.5
 pkgrel=1
 pkgdesc="C++ Wrapper for basic POSIX file operations"
 arch=('any')
