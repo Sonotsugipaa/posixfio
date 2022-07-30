@@ -55,13 +55,13 @@ namespace posixfio {
 		byte_t* buffer_;
 
 	public:
-		InputBuffer();
+		InputBuffer() noexcept;
 		InputBuffer(const InputBuffer&) = delete;
-		InputBuffer(InputBuffer&&);
+		InputBuffer(InputBuffer&&) noexcept;
 		InputBuffer(FileView, size_t capacity);
 		~InputBuffer();
 
-		InputBuffer& operator=(InputBuffer&&);
+		InputBuffer& operator=(InputBuffer&&) noexcept;
 
 		inline const FileView file() const { return file_; }
 
@@ -98,13 +98,13 @@ namespace posixfio {
 		byte_t* buffer_;
 
 	public:
-		OutputBuffer();
+		OutputBuffer() noexcept;
 		OutputBuffer(const OutputBuffer&) = delete;
-		OutputBuffer(OutputBuffer&&);
+		OutputBuffer(OutputBuffer&&) noexcept;
 		OutputBuffer(FileView, size_t capacity);
 		~OutputBuffer();
 
-		OutputBuffer& operator=(OutputBuffer&&);
+		OutputBuffer& operator=(OutputBuffer&&) noexcept;
 
 		inline const FileView file() const { return file_; }
 

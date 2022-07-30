@@ -23,3 +23,7 @@
 # of the temporary files it creates.
 /archlinux/*
 !/archlinux/PKGBUILD
+
+# This was (correctly) automatically added by Visual Studio, I fucking hate Visual Studio
+# (by the way, it converted the line endings to CRLF because fuck you I guess)
+/out/build/x64-Release

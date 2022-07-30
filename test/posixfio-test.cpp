@@ -1,6 +1,6 @@
 #include <test_tools.hpp>
 
-#include "../include/posixfio.hpp"
+#include "posixfio.hpp"
 
 #include <array>
 #include <iostream>
@@ -111,7 +111,7 @@ namespace {
 	utest::ResultType create_file(std::ostream& out) {
 		File f;
 		try {
-			f = File::open(tmpFile.c_str(), O_WRONLY | O_CREAT | O_TRUNC);
+			f = File::open(tmpFile.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
 		} catch(...) { }
 		if(! f) {
 			out << "ERRNO " << errno << ' ' << errno_str(errno) << '\n';
@@ -326,7 +326,7 @@ namespace {
 	utest::ResultType fileerror_enoent(std::ostream& out) {
 		return requireFileError(out, ENOENT, [](std::ostream&) {
 			auto f = File::open(
-				"/\033No file named like this should ever exist in a filesystem's root dir",
+				"/No file named like this should ever exist in a filesystem's root dir",
 				O_RDONLY );
 			if(f) {
 				return 0;
@@ -341,7 +341,7 @@ namespace {
 	utest::ResultType errno_enoent(std::ostream& out) {
 		return requireErrno(out, ENOENT, [](std::ostream&) {
 			auto f = File::open(
-				"/\033No file named like this should ever exist in a filesystem's root dir",
+				"/No file named like this should ever exist in a filesystem's root dir",
 				O_RDONLY );
 			if(f) {
 				return 0;

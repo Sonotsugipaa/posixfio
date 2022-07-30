@@ -1,12 +1,10 @@
-#include "../include/posixfio_tl.hpp"
+#include "posixfio_tl.hpp"
 
 #include <cerrno>
 #include <cassert>
 #include <cstring>
 #include <new>
 #include <algorithm>
-
-#include <unistd.h>
 
 
 
@@ -98,7 +96,7 @@ namespace posixfio {
 				size_t bufferedWrCount = bufCapacity - initBufBegin;
 				size_t directWrCount = count - bufferedWrCount;
 				assert(bufferedWrCount + directWrCount == count);
-				ssize_t wr;
+				ssize_t wr = 0;
 				if(bufferedWrCount > 0) {
 					memcpy(BYTES_(buf) + initBufEnd, src, initAvailSpace);
 					wr = writeLeast(file,
@@ -249,7 +247,7 @@ namespace posixfio {
 
 
 
-	InputBuffer::InputBuffer():
+	InputBuffer::InputBuffer() noexcept:
 			file_()
 			#ifndef NDEBUG
 				, buffer_(nullptr)
@@ -257,7 +255,7 @@ namespace posixfio {
 	{ }
 
 
-	InputBuffer::InputBuffer(InputBuffer&& mv):
+	InputBuffer::InputBuffer(InputBuffer&& mv) noexcept:
 			#define MV_(MEMBER_) MEMBER_(std::move(mv.MEMBER_))
 			#define CP_(MEMBER_) MEMBER_(mv.MEMBER_)
 				MV_(file_),
@@ -297,7 +295,7 @@ namespace posixfio {
 	}
 
 
-	InputBuffer& InputBuffer::operator=(InputBuffer&& mv) {
+	InputBuffer& InputBuffer::operator=(InputBuffer&& mv) noexcept {
 		this->~InputBuffer();
 		return * new (this) InputBuffer(std::move(mv));
 	}
@@ -332,7 +330,7 @@ namespace posixfio {
 
 
 
-	OutputBuffer::OutputBuffer():
+	OutputBuffer::OutputBuffer() noexcept:
 			file_()
 			#ifndef NDEBUG
 				, buffer_(nullptr)
@@ -340,7 +338,7 @@ namespace posixfio {
 	{ }
 
 
-	OutputBuffer::OutputBuffer(OutputBuffer&& mv):
+	OutputBuffer::OutputBuffer(OutputBuffer&& mv) noexcept:
 			#define MV_(MEMBER_) MEMBER_(std::move(mv.MEMBER_))
 			#define CP_(MEMBER_) MEMBER_(mv.MEMBER_)
 				MV_(file_),
@@ -381,7 +379,7 @@ namespace posixfio {
 	}
 
 
-	OutputBuffer& OutputBuffer::operator=(OutputBuffer&& mv) {
+	OutputBuffer& OutputBuffer::operator=(OutputBuffer&& mv) noexcept {
 		this->~OutputBuffer();
 		return * new (this) OutputBuffer(std::move(mv));
 	}

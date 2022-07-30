@@ -1,6 +1,6 @@
 #include <test_tools.hpp>
 
-#include "../include/posixfio_tl.hpp"
+#include "posixfio_tl.hpp"
 
 #include <array>
 #include <iostream>
@@ -169,7 +169,7 @@ namespace {
 		static_assert((outputBufferStaticCapacity == 0) != (outputBufferDynamicCapacity == 0));
 		using Buffer = OutputBuffer<outputBufferStaticCapacity>::type;
 		try {
-			File f = alwaysThrowErr(File::open(tmpFile.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0400));
+			File f = alwaysThrowErr(File::open(tmpFile.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600));
 			{
 				Buffer buf = OutputBuffer<outputBufferStaticCapacity>::ctor(
 					f, outputBufferDynamicCapacity );
