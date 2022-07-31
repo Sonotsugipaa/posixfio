@@ -248,6 +248,8 @@ namespace posixfio {
 			writeAll(file_,
 				reinterpret_cast<byte_t*>(buffer_) + bufferBegin_,
 				bufferEnd_ - bufferBegin_ );
+			bufferBegin_ = 0;
+			bufferEnd_ = 0;
 		}
 	};
 

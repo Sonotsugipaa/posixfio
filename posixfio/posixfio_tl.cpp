@@ -266,9 +266,7 @@ namespace posixfio {
 			#undef MV_
 			#undef CP_
 	{
-		#ifndef NDEBUG
-			mv.buffer_ = nullptr;
-		#endif
+		mv.buffer_ = nullptr;
 	}
 
 
@@ -349,9 +347,7 @@ namespace posixfio {
 			#undef MV_
 			#undef CP_
 	{
-		#ifndef NDEBUG
-			mv.buffer_ = nullptr;
-		#endif
+		mv.buffer_ = nullptr;
 	}
 
 
@@ -391,6 +387,8 @@ namespace posixfio {
 
 	void OutputBuffer::flush() {
 		writeAll(file_, reinterpret_cast<byte_t*>(buffer_) + begin_, end_ - begin_);
+		begin_ = 0;
+		end_ = 0;
 	}
 
 }
