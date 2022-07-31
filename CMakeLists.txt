@@ -2,8 +2,8 @@
 
 	cmake_minimum_required(VERSION 3.20)
 	project(posixfio
-		VERSION "0.2.5"
-		DESCRIPTION "Simple C++ wrapper around basic POSIX file IO functions. ")
+		VERSION "0.2.6"
+		DESCRIPTION "Simple C++ wrapper around basic POSIX file IO functions." )
 
 
 # Set the project's structure
@@ -70,34 +70,34 @@
 
 # Setup `apcfConfig.cmake` holy fuck this is copypasty
 
-add_library(posixfio::posixfio ALIAS posixfio)
+	add_library(posixfio::posixfio ALIAS posixfio)
 
-include(GNUInstallDirs)
-install(
-	TARGETS posixfio
-	EXPORT posixfioTargets
-	ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} )
+	include(GNUInstallDirs)
+	install(
+		TARGETS posixfio
+		EXPORT posixfioTargets
+		ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} )
 
-install(
-	EXPORT posixfioTargets
-	DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/posixfio
-	NAMESPACE posixfio::posixfio
-	FILE posixfioTargets.cmake )
+	install(
+		EXPORT posixfioTargets
+		DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/posixfio
+		NAMESPACE posixfio::posixfio
+		FILE posixfioTargets.cmake )
 
-include(CMakePackageConfigHelpers)
-configure_package_config_file(
-	"Config.cmake.in"
-	"posixfioConfig.cmake"
-	INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/posixfio
-	PATH_VARS CMAKE_INSTALL_LIBDIR )
+	include(CMakePackageConfigHelpers)
+	configure_package_config_file(
+		"Config.cmake.in"
+		"posixfioConfig.cmake"
+		INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/posixfio
+		PATH_VARS CMAKE_INSTALL_LIBDIR )
 
-write_basic_package_version_file(
-	${CMAKE_CURRENT_BINARY_DIR}/posixfioConfigVersion.cmake
-	VERSION "${PROJECT_VERSION}"
-	COMPATIBILITY SameMajorVersion )
+	write_basic_package_version_file(
+		${CMAKE_CURRENT_BINARY_DIR}/posixfioConfigVersion.cmake
+		VERSION "${PROJECT_VERSION}"
+		COMPATIBILITY SameMajorVersion )
 
-install(
-	FILES
-		"${CMAKE_CURRENT_BINARY_DIR}/posixfioConfig.cmake"
-		"${CMAKE_CURRENT_BINARY_DIR}/posixfioConfigVersion.cmake"
-	DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/posixfio" )
+	install(
+		FILES
+			"${CMAKE_CURRENT_BINARY_DIR}/posixfioConfig.cmake"
+			"${CMAKE_CURRENT_BINARY_DIR}/posixfioConfigVersion.cmake"
+		DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/posixfio" )

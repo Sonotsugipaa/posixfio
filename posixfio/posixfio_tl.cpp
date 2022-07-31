@@ -308,8 +308,8 @@ namespace posixfio {
 
 	ssize_t InputBuffer::fill() {
 		if(end_ < capacity_) {
-			ssize_t rd = file_.read(buffer_, capacity_ - end_);
-			if(rd > 0) end_ += rd;
+			ssize_t rd = file_.read(buffer_ + end_, capacity_ - end_);
+			if(rd >= 0) [[likely]] end_ += rd;
 			return rd;
 		} else {
 			return 0;
@@ -321,7 +321,7 @@ namespace posixfio {
 		if(begin_ + 1 >= end_) {
 			if(end_ >= capacity_)  discard();
 			ssize_t fl = fill();
-			if(fl <= 0) { return fl; }
+			if(fl <= 0)  return fl;
 		} else {
 			++ begin_;
 		}
