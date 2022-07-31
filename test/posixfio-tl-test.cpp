@@ -245,6 +245,7 @@ namespace {
 				assert(buf.data() != nullptr);
 				cmpString.push_back(*buf.data());
 			}
+			assert(rd < 1);
 			if(cmpString.size() != ioPayload.size()) {
 				out << "Size mismatch: expected " << ioPayload.size() << ", got " << cmpString.size() << std::endl;
 				return eFailure;
