@@ -88,24 +88,27 @@ namespace posixfio {
 				*bufEndPtr += count;
 				return count;
 			} else {
+				// Need to flush buffer, then write directly
+				// [     | ..A.. | ...........B........... ]   ...........C........
+				// A: previously queued   B: queued just now   C: unbuffered write
+				// A+B: total queue       B+C: current user-requested write
 				#ifdef POSIXFIO_NOTHROW
 					#define CHECK_ERR_ { assert(wr != 0);  if(wr < 0) [[unlikely]] { return wr; } }
 				#else
 					#define CHECK_ERR_ { assert(wr > 0); }
 				#endif
 				size_t bufferedWrCount = bufCapacity - initBufBegin;
-				size_t directWrCount = count - bufferedWrCount;
-				assert(bufferedWrCount + directWrCount == count);
+				size_t directWrCount = count + (initBufEnd - initBufBegin) - bufferedWrCount;
+				assert(bufferedWrCount + directWrCount == count + (initBufEnd - initBufBegin));
 				ssize_t wr = 0;
 				if(bufferedWrCount > 0) {
 					memcpy(BYTES_(buf) + initBufEnd, src, initAvailSpace);
-					wr = writeLeast(file,
-						BYTES_(buf) + initBufBegin,
-						1, bufferedWrCount );
+					wr = file.write(CBYTES_(buf) + initBufBegin, bufferedWrCount);
 					CHECK_ERR_
 					assert(size_t(wr) <= bufferedWrCount);
 				}
 				if(size_t(wr) < bufferedWrCount) {
+					// Buffer has leftover bytes
 					size_t shift = initBufBegin + wr;
 					size_t newBufEnd = bufCapacity - shift;
 					assert(bufCapacity > shift);
@@ -115,6 +118,7 @@ namespace posixfio {
 					assert(newBufEnd >= initBufEnd);
 					return wr + (newBufEnd - initBufEnd);
 				} else {
+					// Buffer has been completely written
 					#ifdef POSIXFIO_DBG_LIMIT_DIRECT_WR
 						directWrCount = std::min(directWrCount, decltype(directWrCount)(POSIXFIO_DBG_LIMIT_DIRECT_WR));
 					#endif
@@ -304,6 +308,23 @@ namespace posixfio {
 	}
 
 
+	ssize_t InputBuffer::readLeast(void* buf, size_t least, size_t count) {
+		ssize_t total = 0;
+		while(size_t(total) < least) {
+			auto rd = buffer_op::bfRead(file_, buffer_, &begin_, &end_, buf, ssize_t(count) - total);
+			if(rd == 0) [[unlikely]] return total;
+			if(rd < 0) [[unlikely]] return -1;
+			total += rd;
+		}
+		return total;
+	}
+
+
+	ssize_t InputBuffer::readAll(void* buf, size_t count) {
+		return readLeast(buf, count, count);
+	}
+
+
 	ssize_t InputBuffer::fill() {
 		if(end_ < capacity_) {
 			ssize_t rd = file_.read(buffer_ + end_, capacity_ - end_);
@@ -366,7 +387,7 @@ namespace posixfio {
 	OutputBuffer::~OutputBuffer() {
 		if(file_) {
 			assert(end_ >= begin_);
-			if(end_ > begin_)  writeAll(file_, reinterpret_cast<byte_t*>(buffer_) + begin_, end_ - begin_);
+			if(end_ > begin_)  posixfio::writeAll(file_, reinterpret_cast<byte_t*>(buffer_) + begin_, end_ - begin_);
 			delete[] buffer_;
 			#ifndef NDEBUG
 				buffer_ = nullptr;
@@ -385,8 +406,26 @@ namespace posixfio {
 		return buffer_op::bfWrite(file_, buffer_, &begin_, &end_, capacity_, userBuf, count);
 	}
 
+
+	ssize_t OutputBuffer::writeLeast(const void* buf, size_t least, size_t count) {
+		ssize_t total = 0;
+		while(size_t(total) < least) {
+			auto rd = buffer_op::bfWrite(file_, buffer_, &begin_, &end_, capacity_, buf, ssize_t(count) - total);
+			if(rd == 0) [[unlikely]] return total;
+			if(rd < 0) [[unlikely]] return -1;
+			total += rd;
+		}
+		return total;
+	}
+
+
+	ssize_t OutputBuffer::writeAll(const void* buf, size_t count) {
+		return writeLeast(buf, count, count);
+	}
+
+
 	void OutputBuffer::flush() {
-		writeAll(file_, reinterpret_cast<byte_t*>(buffer_) + begin_, end_ - begin_);
+		posixfio::writeAll(file_, reinterpret_cast<byte_t*>(buffer_) + begin_, end_ - begin_);
 		begin_ = 0;
 		end_ = 0;
 	}

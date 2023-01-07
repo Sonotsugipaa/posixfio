@@ -42,7 +42,7 @@ namespace posixfio {
 
 	/** Repeatedly writes data to the given FileView, until more than
 	 * `least` and less than `count+1` bytes have been written
-	 * bytes have been written or an error occurs. */
+	 * or an error occurs. */
 	ssize_t writeLeast(FileView, const void* buf, size_t least, size_t count);
 
 
@@ -67,6 +67,12 @@ namespace posixfio {
 
 		/** Similar to File::read, but may fail after a partial read. */
 		ssize_t read(void* buf, size_t count);
+
+		/** Similar to readAll, but may fail after a partial read. */
+		ssize_t readAll(void* buf, size_t count);
+
+		/** Similar to readLeast, but may fail after a partial read. */
+		ssize_t readLeast(void* buf, size_t least, size_t count);
 
 		/** Try to fill the buffer, if it isn't already full. */
 		ssize_t fill();
@@ -110,6 +116,12 @@ namespace posixfio {
 
 		/** Similar to File::write, but may fail after a partial write. */
 		ssize_t write(const void* buf, size_t count);
+
+		/** Similar to writeAll, but may fail after a partial write. */
+		ssize_t writeAll(const void* buf, size_t count);
+
+		/** Similar to writeLeast, but may fail after a partial write. */
+		ssize_t writeLeast(const void* buf, size_t least, size_t count);
 
 		/** Write all the ready-to-write bytes. */
 		void flush();
@@ -155,6 +167,23 @@ namespace posixfio {
 		/** Similar to File::read, but may fail after a partial read. */
 		ssize_t read(void* buf, size_t count) {
 			return buffer_op::bfRead(file_, buffer_, &bufferBegin_, &bufferEnd_, buf, count);
+		}
+
+		/** Similar to readLeast, but may fail after a partial read. */
+		ssize_t readLeast(void* buf, size_t least, size_t count) {
+			ssize_t total = 0;
+			while(total < least) {
+				auto rd = buffer_op::bfRead(file_, buffer_, &bufferBegin_, &bufferEnd_, buf, ssize_t(count) - total);
+				if(rd == 0) [[unlikely]] return total;
+				if(rd < 0) [[unlikely]] return -1;
+				total += rd;
+			}
+			return total;
+		}
+
+		/** Similar to readAll, but may fail after a partial read. */
+		ssize_t readAll(void* buf, size_t count) {
+			return readLeast(buf, count, count);
 		}
 
 		/** Try to fill the buffer, if it isn't already full. */
@@ -224,7 +253,7 @@ namespace posixfio {
 		~ArrayOutputBuffer() {
 			if(file_) {
 				if(bufferEnd_ > bufferBegin_) {
-					writeAll(file_,
+					posixfio::writeAll(file_,
 						reinterpret_cast<byte_t*>(buffer_) + bufferBegin_,
 						bufferEnd_ - bufferBegin_ );
 				}
@@ -241,6 +270,23 @@ namespace posixfio {
 		/** Similar to File::write, but may fail after a partial write. */
 		ssize_t write(const void* buf, size_t count) {
 			return buffer_op::bfWrite(file_, buffer_, &bufferBegin_, &bufferEnd_, capacity, buf, count);
+		}
+
+		/** Similar to writeLeast, but may fail after a partial write. */
+		ssize_t writeLeast(const void* buf, size_t least, size_t count) {
+			ssize_t total = 0;
+			while(total < least) {
+				auto rd = buffer_op::bfWrite(file_, buffer_, &bufferBegin_, &bufferEnd_, capacity, buf, ssize_t(count) - total);
+				if(rd == 0) [[unlikely]] return total;
+				if(rd < 0) [[unlikely]] return -1;
+				total += rd;
+			}
+			return total;
+		}
+
+		/** Similar to writeAll, but may fail after a partial write. */
+		ssize_t writeAll(const void* buf, size_t count) {
+			return writeLeast(buf, count, count);
 		}
 
 		/** Write all the ready-to-write bytes. */
