@@ -91,15 +91,16 @@ namespace posixfio {
 				// Need to flush buffer, then write directly
 				// [     | ..A.. | ...........B........... ]   ...........C........
 				// A: previously queued   B: queued just now   C: unbuffered write
-				// A+B: total queue       B+C: current user-requested write
+				// A+B: buffered write    B+C: current user-requested write
 				#ifdef POSIXFIO_NOTHROW
 					#define CHECK_ERR_ { assert(wr != 0);  if(wr < 0) [[unlikely]] { return wr; } }
 				#else
 					#define CHECK_ERR_ { assert(wr > 0); }
 				#endif
 				size_t bufferedWrCount = bufCapacity - initBufBegin;
-				size_t directWrCount = count + (initBufEnd - initBufBegin) - bufferedWrCount;
-				assert(bufferedWrCount + directWrCount == count + (initBufEnd - initBufBegin));
+				size_t prevQueued = initBufEnd - initBufBegin;
+				size_t directWrCount = count + prevQueued - bufferedWrCount;
+				assert(bufferedWrCount + directWrCount == count + prevQueued);
 				ssize_t wr = 0;
 				if(bufferedWrCount > 0) {
 					memcpy(BYTES_(buf) + initBufEnd, src, initAvailSpace);
@@ -108,7 +109,7 @@ namespace posixfio {
 					assert(size_t(wr) <= bufferedWrCount);
 				}
 				if(size_t(wr) < bufferedWrCount) {
-					// Buffer has leftover bytes
+					// Buffer has leftover bytes (implying incomplete write)
 					size_t shift = initBufBegin + wr;
 					size_t newBufEnd = bufCapacity - shift;
 					assert(bufCapacity > shift);
@@ -122,7 +123,7 @@ namespace posixfio {
 					#ifdef POSIXFIO_DBG_LIMIT_DIRECT_WR
 						directWrCount = std::min(directWrCount, decltype(directWrCount)(POSIXFIO_DBG_LIMIT_DIRECT_WR));
 					#endif
-					wr = file.write(CBYTES_(src) + bufferedWrCount, directWrCount);
+					wr = file.write(CBYTES_(src) + (bufferedWrCount - prevQueued), directWrCount);
 					CHECK_ERR_
 					assert(size_t(wr) <= directWrCount);
 					*bufBeginPtr = 0;
