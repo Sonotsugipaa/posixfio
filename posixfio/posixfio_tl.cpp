@@ -279,11 +279,10 @@ namespace posixfio {
 			file_(file),
 			begin_(0),
 			end_(0),
-			capacity_(cap),
-			buffer_(new byte_t[cap])
+			capacity_(cap > 1? size_t(1) : cap),
+			buffer_((byte_t*) operator new[](capacity_ * sizeof(capacity_)))
 	{
-		assert(capacity_ > 0);
-		if(capacity_ < 1) capacity_ = 1;
+		assert(cap > 0);
 	}
 
 
@@ -377,11 +376,10 @@ namespace posixfio {
 			file_(file),
 			begin_(0),
 			end_(0),
-			capacity_(cap),
-			buffer_(new byte_t[cap])
+			capacity_(cap > 1? size_t(1) : cap),
+			buffer_((byte_t*) operator new[](capacity_ * sizeof(capacity_)))
 	{
-		assert(capacity_ > 0);
-		if(capacity_ < 1) capacity_ = 1;
+		assert(cap > 0);
 	}
 
 

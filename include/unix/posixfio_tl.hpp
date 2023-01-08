@@ -135,7 +135,7 @@ namespace posixfio {
 		FileView file_;
 		size_t bufferBegin_;
 		size_t bufferEnd_;
-		byte_t buffer_[capacity];
+		byte_t buffer_[capacity];  static_assert(capacity > 0);
 
 	public:
 		ArrayInputBuffer() = default;
@@ -230,7 +230,7 @@ namespace posixfio {
 		FileView file_;
 		size_t bufferBegin_;
 		size_t bufferEnd_;
-		byte_t buffer_[capacity];
+		byte_t buffer_[capacity];  static_assert(capacity > 0);
 
 	public:
 		ArrayOutputBuffer() = default;
