@@ -10,7 +10,7 @@
 
 namespace posixfio {
 
-	namespace buffer_op {
+	namespace _buffer_op_impl {
 
 		/* This namespace is only to be used internally by this library,
 		 * and its signatures may change at any time in any way.
@@ -154,7 +154,7 @@ namespace posixfio {
 
 		/** Similar to File::read, but may fail after a partial read. */
 		ssize_t read(void* buf, size_t count) {
-			return buffer_op::bfRead(file_, buffer_, &bufferBegin_, &bufferEnd_, buf, count);
+			return _buffer_op_impl::bfRead(file_, buffer_, &bufferBegin_, &bufferEnd_, buf, count);
 		}
 
 		/** Try to fill the buffer, if it isn't already full. */
@@ -240,7 +240,7 @@ namespace posixfio {
 
 		/** Similar to File::write, but may fail after a partial write. */
 		ssize_t write(const void* buf, size_t count) {
-			return buffer_op::bfWrite(file_, buffer_, &bufferBegin_, &bufferEnd_, capacity, buf, count);
+			return _buffer_op_impl::bfWrite(file_, buffer_, &bufferBegin_, &bufferEnd_, capacity, buf, count);
 		}
 
 		/** Write all the ready-to-write bytes. */

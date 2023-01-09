@@ -10,7 +10,7 @@
 
 namespace posixfio {
 
-	namespace buffer_op {
+	namespace _buffer_op_impl {
 
 		/* This namespace is only to be used internally by this library,
 		 * and its signatures may change at any time in any way.
@@ -166,14 +166,14 @@ namespace posixfio {
 
 		/** Similar to File::read, but may fail after a partial read. */
 		ssize_t read(void* buf, size_t count) {
-			return buffer_op::bfRead(file_, buffer_, &bufferBegin_, &bufferEnd_, buf, count);
+			return _buffer_op_impl::bfRead(file_, buffer_, &bufferBegin_, &bufferEnd_, buf, count);
 		}
 
 		/** Similar to readLeast, but may fail after a partial read. */
 		ssize_t readLeast(void* buf, size_t least, size_t count) {
 			ssize_t total = 0;
-			while(total < least) {
-				auto rd = buffer_op::bfRead(file_, buffer_, &bufferBegin_, &bufferEnd_, buf, ssize_t(count) - total);
+			while(total < ssize_t(least)) {
+				auto rd = _buffer_op_impl::bfRead(file_, buffer_, &bufferBegin_, &bufferEnd_, buf, ssize_t(count) - total);
 				if(rd == 0) [[unlikely]] return total;
 				if(rd < 0) [[unlikely]] return -1;
 				total += rd;
@@ -269,14 +269,14 @@ namespace posixfio {
 
 		/** Similar to File::write, but may fail after a partial write. */
 		ssize_t write(const void* buf, size_t count) {
-			return buffer_op::bfWrite(file_, buffer_, &bufferBegin_, &bufferEnd_, capacity, buf, count);
+			return _buffer_op_impl::bfWrite(file_, buffer_, &bufferBegin_, &bufferEnd_, capacity, buf, count);
 		}
 
 		/** Similar to writeLeast, but may fail after a partial write. */
 		ssize_t writeLeast(const void* buf, size_t least, size_t count) {
 			ssize_t total = 0;
-			while(total < least) {
-				auto rd = buffer_op::bfWrite(file_, buffer_, &bufferBegin_, &bufferEnd_, capacity, buf, ssize_t(count) - total);
+			while(total < ssize_t(least)) {
+				auto rd = _buffer_op_impl::bfWrite(file_, buffer_, &bufferBegin_, &bufferEnd_, capacity, buf, ssize_t(count) - total);
 				if(rd == 0) [[unlikely]] return total;
 				if(rd < 0) [[unlikely]] return -1;
 				total += rd;

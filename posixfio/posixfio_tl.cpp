@@ -8,8 +8,8 @@
 
 
 
-// Use the next two lines to limit I/O request sizes, ONLY FOR DEBUGGING OR MANUAL TESTING;
-// use the third one to remind yourself of the former.
+// Use the next four lines to limit I/O request sizes, ONLY FOR DEBUGGING OR MANUAL TESTING;
+// use the fifth one to remind yourself of the former.
 //#define POSIXFIO_DBG_LIMIT_DIRECT_RD 2041
 //#define POSIXFIO_DBG_LIMIT_DIRECT_WR 2042
 //#define POSIXFIO_DBG_LIMIT_LEAST_RD 2031
@@ -20,7 +20,7 @@
 
 namespace posixfio {
 
-	namespace buffer_op {
+	namespace _buffer_op_impl {
 
 		ssize_t bfRead(
 				FileView file,
@@ -128,7 +128,7 @@ namespace posixfio {
 					assert(size_t(wr) <= directWrCount);
 					*bufBeginPtr = 0;
 					*bufEndPtr = 0;
-					return wr + bufferedWrCount;
+					return wr + bufferedWrCount - prevQueued;
 				}
 				#undef CHECK_ERR_
 			}
@@ -202,7 +202,7 @@ namespace posixfio {
 			ssize_t wr = file.write(buf, count);
 			#ifdef POSIXFIO_NOTHROW
 				assert(wr != 0);
-				if(wr < 0) return wr;
+				if(wr < 0) [[unlikely]] return wr;
 			#else
 				assert(wr > 0);
 			#endif
@@ -233,7 +233,7 @@ namespace posixfio {
 			ssize_t wr = file.write(buf, count);
 			#ifdef POSIXFIO_NOTHROW
 				assert(wr != 0);
-				if(wr < 0) return wr;
+				if(wr < 0) [[unlikely]] return wr;
 			#else
 				assert(wr > 0);
 			#endif
@@ -304,14 +304,14 @@ namespace posixfio {
 
 
 	ssize_t InputBuffer::read(void* userBuf, size_t count) {
-		return buffer_op::bfRead(file_, buffer_, &begin_, &end_, userBuf, count);
+		return _buffer_op_impl::bfRead(file_, buffer_, &begin_, &end_, userBuf, count);
 	}
 
 
 	ssize_t InputBuffer::readLeast(void* buf, size_t least, size_t count) {
 		ssize_t total = 0;
 		while(size_t(total) < least) {
-			auto rd = buffer_op::bfRead(file_, buffer_, &begin_, &end_, buf, ssize_t(count) - total);
+			auto rd = _buffer_op_impl::bfRead(file_, buffer_, &begin_, &end_, buf, ssize_t(count) - total);
 			if(rd == 0) [[unlikely]] return total;
 			if(rd < 0) [[unlikely]] return -1;
 			total += rd;
@@ -402,14 +402,14 @@ namespace posixfio {
 
 
 	ssize_t OutputBuffer::write(const void* userBuf, size_t count) {
-		return buffer_op::bfWrite(file_, buffer_, &begin_, &end_, capacity_, userBuf, count);
+		return _buffer_op_impl::bfWrite(file_, buffer_, &begin_, &end_, capacity_, userBuf, count);
 	}
 
 
 	ssize_t OutputBuffer::writeLeast(const void* buf, size_t least, size_t count) {
 		ssize_t total = 0;
 		while(size_t(total) < least) {
-			auto rd = buffer_op::bfWrite(file_, buffer_, &begin_, &end_, capacity_, buf, ssize_t(count) - total);
+			auto rd = _buffer_op_impl::bfWrite(file_, buffer_, &begin_, &end_, capacity_, buf, ssize_t(count) - total);
 			if(rd == 0) [[unlikely]] return total;
 			if(rd < 0) [[unlikely]] return -1;
 			total += rd;
