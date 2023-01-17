@@ -51,6 +51,8 @@
 		add_subdirectory(posixfio/unix)
 	elseif(WIN32)
 		add_subdirectory(posixfio/win32)
+	else()
+		message(FATAL_ERROR "Unknown platform")
 	endif()
 
 

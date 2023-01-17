@@ -5,7 +5,7 @@
 #include <utility> // std::move
 #include <new>
 
-#include <Windows.h>
+#include <windows.h>
 #include <io.h>
 #include <fileapi.h>
 

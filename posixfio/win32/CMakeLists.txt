@@ -7,16 +7,18 @@ add_library(posixfio STATIC
 	posixfio.cpp
 	../posixfio_tl.cpp )
 
-set_target_properties(
-	posixfio PROPERTIES
-	VERSION "${PROJECT_VERSION}"
-	SOVERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}" )
+	target_compile_definitions(posixfio PUBLIC POSIXFIO_WIN32)
 
 if(POSIXFIO_LOCAL)
 	target_include_directories(posixfio PUBLIC ${POSIXFIO_INCLUDE_DIR})
 else()
 	target_include_directories(posixfio PRIVATE ${POSIXFIO_INCLUDE_DIR})
 endif(POSIXFIO_LOCAL)
+
+set_target_properties(
+	posixfio PROPERTIES
+	VERSION "${PROJECT_VERSION}"
+	SOVERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}" )
 
 if(NOT POSIXFIO_LOCAL)
 	install(TARGETS posixfio DESTINATION lib)

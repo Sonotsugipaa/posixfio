@@ -9,7 +9,7 @@
 
 pkgname=posixfio
 pkgver=0.3.0
-pkgrel=1
+pkgrel=3
 pkgdesc="C++ Wrapper for basic POSIX file operations"
 arch=('any')
 makedepends=('gcc>=12' 'cmake>=3.20')
