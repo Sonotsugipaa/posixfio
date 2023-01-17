@@ -1,6 +1,10 @@
-#include <test_tools.hpp>
+#include "test_tools.hpp"
 
-#include "posixfio.hpp"
+#if defined POSIXFIO_UNIX
+	#include "../include/unix/posixfio.hpp"
+#elif defined POSIXFIO_WIN32
+	#include "../include/win32/posixfio.hpp"
+#endif
 
 #include <array>
 #include <iostream>

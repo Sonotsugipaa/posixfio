@@ -8,11 +8,11 @@
 # it follows the AUR guidelines.
 
 pkgname=posixfio
-pkgver=0.2.6
-pkgrel=1
+pkgver=0.3.0
+pkgrel=3
 pkgdesc="C++ Wrapper for basic POSIX file operations"
 arch=('any')
-makedepends=('gcc>=11' 'cmake>=3.20')
+makedepends=('gcc>=12' 'cmake>=3.20')
 
 prepare() {
 	# This operation symlinks required files from the directory containing PKGBUILD

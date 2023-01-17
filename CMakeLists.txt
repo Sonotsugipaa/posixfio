@@ -2,7 +2,7 @@
 
 	cmake_minimum_required(VERSION 3.20)
 	project(posixfio
-		VERSION "0.2.6"
+		VERSION "0.3.0"
 		DESCRIPTION "Simple C++ wrapper around basic POSIX file IO functions." )
 
 
@@ -11,15 +11,6 @@
 	set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
 	set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
 	set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
-
-	link_directories(lib)
-	link_directories(bin)
-
-	if(UNIX)
-		include_directories(include/unix)
-	elseif(WIN32)
-		include_directories(include/win32)
-	endif()
 
 
 # Set warning levels
@@ -60,6 +51,8 @@
 		add_subdirectory(posixfio/unix)
 	elseif(WIN32)
 		add_subdirectory(posixfio/win32)
+	else()
+		message(FATAL_ERROR "Unknown platform")
 	endif()
 
 
@@ -70,6 +63,7 @@
 
 # Setup `apcfConfig.cmake` holy fuck this is copypasty
 
+if(NOT POSIXFIO_LOCAL)
 	add_library(posixfio::posixfio ALIAS posixfio)
 
 	include(GNUInstallDirs)
@@ -101,3 +95,4 @@
 			"${CMAKE_CURRENT_BINARY_DIR}/posixfioConfig.cmake"
 			"${CMAKE_CURRENT_BINARY_DIR}/posixfioConfigVersion.cmake"
 		DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/posixfio" )
+endif(NOT POSIXFIO_LOCAL)

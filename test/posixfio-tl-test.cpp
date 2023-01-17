@@ -1,6 +1,6 @@
 #include <test_tools.hpp>
 
-#include "posixfio_tl.hpp"
+#include "../include/win32/posixfio_tl.hpp"
 
 #include <array>
 #include <iostream>
@@ -20,7 +20,7 @@ namespace {
 	constexpr auto eNeutral = utest::ResultType::eNeutral;
 	constexpr auto eSuccess = utest::ResultType::eSuccess;
 
-	const std::string tmpFile = "tmpfile";
+	const std::string tmpFile = "test-tmpfile";
 
 	std::string ioPayload;
 
@@ -138,6 +138,15 @@ namespace {
 	}
 
 
+	ssize_t diff(std::string_view s0, std::string_view s1) {
+		size_t minSize = std::min(s0.size(), s1.size());
+		for(size_t i=0; i < minSize; ++i) {
+			if(s0[i] != s1[i]) [[unlikely]] return i;
+		}
+		return -1;
+	}
+
+
 	template<size_t inputBufferStaticCapacity>
 	struct InputBuffer {
 		using type = ArrayInputBuffer<inputBufferStaticCapacity>;
@@ -220,8 +229,78 @@ namespace {
 				out << "Unexpected EOF, " << count << " bytes missing" << std::endl;
 				return eFailure;
 			}
-			if(0 != strncmp(ioPayload.data(), cmpString.get(), ioPayload.size())) {
-				out << "File content does not match" << std::endl;
+			auto diffPt = diff(ioPayload, std::string_view(cmpString.get(), cmpString.get() + ioPayload.size()));
+			if(0 <= diffPt) {
+				out << "File content does not match at char " << diffPt << std::endl;
+				return eFailure;
+			}
+			return eSuccess;
+		} CATCH_ERRNO_(out)
+		return eFailure;
+	}
+
+
+	template<size_t outputBufferStaticCapacity, size_t outputBufferDynamicCapacity>
+	utest::ResultType write_file_inconsistent(std::ostream& out) {
+		static_assert((outputBufferStaticCapacity == 0) != (outputBufferDynamicCapacity == 0));
+		using Buffer = OutputBuffer<outputBufferStaticCapacity>::type;
+		try {
+			File f = alwaysThrowErr(File::open(tmpFile.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600));
+			{
+				Buffer buf = OutputBuffer<outputBufferStaticCapacity>::ctor(
+					f, outputBufferDynamicCapacity );
+				ssize_t wr;
+				ssize_t count = ioPayload.size();
+				size_t bigWriteSize = (count - 5*4) / 2;
+				size_t cursor = 0;
+				#define CHECK_PARTIAL_WR_ { if(wr != ssize_t(n)) { out << "Unexpected partial write of " << wr << '/' << n << " bytes" << std::endl; return eFailure; } }
+				#define WR_(N_) { const auto n = N_; wr = alwaysThrowErr(buf.writeAll(ioPayload.data() + cursor, n));  assert(wr > 0);  count -= wr;  cursor += wr; CHECK_PARTIAL_WR_ }
+				assert(ioPayload.size() > 5*4);
+				WR_(4) WR_(4)
+				WR_(bigWriteSize)
+				WR_(4)
+				WR_(count - 8)
+				WR_(4) WR_(4)
+				#undef WR_
+				#undef CHECK_PARTIAL_RD_
+				assert(count == 0);
+			}
+			return eSuccess;
+		} CATCH_ERRNO_(out)
+		return eFailure;
+	}
+
+
+	template<size_t inputBufferStaticCapacity, size_t inputBufferDynamicCapacity>
+	utest::ResultType read_file_inconsistent(std::ostream& out) {
+		static_assert((inputBufferStaticCapacity == 0) != (inputBufferDynamicCapacity == 0));
+		using Buffer = InputBuffer<inputBufferStaticCapacity>::type;
+		try {
+			File f = alwaysThrowErr(File::open(tmpFile.c_str(), O_RDONLY));
+			Buffer buf = InputBuffer<inputBufferStaticCapacity>::ctor(
+				f, inputBufferDynamicCapacity );
+			std::unique_ptr<char[]> cmpString = std::make_unique<char[]>(ioPayload.size());
+			ssize_t rd;
+			ssize_t count = ioPayload.size();
+			size_t bigReadSize = (count - 5*4) / 2;
+			size_t cursor = 0;
+			#define CHECK_PARTIAL_RD_ { if(rd != ssize_t(n)) { out << "Unexpected partial read of " << rd << '/' << n << " bytes" << std::endl; return eFailure; } }
+			#define RD_(N_) { const auto n = N_; rd = alwaysThrowErr(buf.readAll(cmpString.get() + cursor, n));  count -= rd;  cursor += rd; CHECK_PARTIAL_RD_ }
+			assert(ioPayload.size() > 5*4);
+			RD_(4) RD_(4)
+			RD_(bigReadSize)
+			RD_(4)
+			RD_(count - 8)
+			RD_(4) RD_(4)
+			#undef RD_
+			#undef CHECK_PARTIAL_RD_
+			if(count > 0) {
+				out << "Unexpected EOF, " << count << " bytes missing" << std::endl;
+				return eFailure;
+			}
+			auto diffPt = diff(ioPayload, std::string_view(cmpString.get(), cmpString.get() + ioPayload.size()));
+			if(0 <= diffPt) {
+				out << "File content does not match at char " << diffPt << std::endl;
 				return eFailure;
 			}
 			return eSuccess;
@@ -250,8 +329,9 @@ namespace {
 				out << "Size mismatch: expected " << ioPayload.size() << ", got " << cmpString.size() << std::endl;
 				return eFailure;
 			}
-			if(0 != strncmp(ioPayload.data(), cmpString.data(), ioPayload.size())) {
-				out << "File content has the expected size, but does not match" << std::endl;
+			auto diffPt = diff(ioPayload, cmpString);
+			if(0 <= diffPt) {
+				out << "File content does not match at char " << diffPt << std::endl;
 				return eFailure;
 			}
 			return eSuccess;
@@ -278,7 +358,7 @@ namespace {
 
 	utest::ResultType fileerror_buffer_ebadf(std::ostream& out) {
 		return requireFileError(out, EBADF, [](std::ostream& out) {
-			auto f = File::open(tmpFile.c_str(), O_WRONLY | O_CREAT);
+			auto f = File::open(tmpFile.c_str(), O_WRONLY | O_CREAT | O_TRUNC);
 			auto fb = posixfio::InputBuffer(f, 1);
 			ssize_t rd = fb.fwd(); // Can't read from a WRONLY file
 			switch(rd) {
@@ -295,7 +375,7 @@ namespace {
 
 	utest::ResultType errno_buffer_ebadf(std::ostream& out) {
 		return requireErrno(out, EBADF, [](std::ostream& out) {
-			auto f = File::open(tmpFile.c_str(), O_WRONLY | O_CREAT);
+			auto f = File::open(tmpFile.c_str(), O_WRONLY | O_CREAT | O_TRUNC);
 			auto fb = posixfio::InputBuffer(f, 1);
 			ssize_t rd = fb.fwd(); // Can't read from a WRONLY file
 			switch(rd) {
@@ -315,12 +395,16 @@ namespace {
 			utest::TestBatch& batch, size_t payloadSize,
 			const std::string& wrString, utest::ResultType (*wrFn)(std::ostream&),
 			const std::string& rdString, utest::ResultType (*rdFn)(std::ostream&),
-			const std::string& bfString, utest::ResultType (*bfFn)(std::ostream&)
+			const std::string& bfString, utest::ResultType (*bfFn)(std::ostream&),
+			const std::string& wriString, utest::ResultType (*wriFn)(std::ostream&),
+			const std::string& rdiString, utest::ResultType (*rdiFn)(std::ostream&)
 	) {
 		ioPayload = mkPayload(payloadSize);
 		batch.run(wrString, wrFn);
 		batch.run(rdString, rdFn);
 		batch.run(bfString, bfFn);
+		batch.run(wriString, wriFn);
+		batch.run(rdiString, rdiFn);
 	};
 
 
@@ -330,17 +414,23 @@ namespace {
 	void testPayloads(
 			utest::TestBatch& batch
 	) {
-		static const std::string wrStackPrefixStr = "Stack buffer write      " + constSizeStr<matchBufSize> + " / ";
-		static const std::string rdStackPrefixStr = "Stack buffer read       " + constSizeStr<matchBufSize> + " / ";
-		static const std::string bfStackPrefixStr = "Stack buffer read (raw) " + constSizeStr<matchBufSize> + " / ";
-		static const std::string wrHeapPrefixStr = "Heap buffer write      " + constSizeStr<matchBufSize> + " / ";
-		static const std::string rdHeapPrefixStr = "Heap buffer read       " + constSizeStr<matchBufSize> + " / ";
-		static const std::string bfHeapPrefixStr = "Heap buffer read (raw) " + constSizeStr<matchBufSize> + " / ";
+		static const std::string wrStackPrefixStr  = "Stack buffer write         " + constSizeStr<matchBufSize> + " / ";
+		static const std::string rdStackPrefixStr  = "Stack buffer read          " + constSizeStr<matchBufSize> + " / ";
+		static const std::string bfStackPrefixStr  = "Stack buffer read (raw)    " + constSizeStr<matchBufSize> + " / ";
+		static const std::string wriStackPrefixStr = "Stack buffer varying write " + constSizeStr<matchBufSize> + " / ";
+		static const std::string rdiStackPrefixStr = "Stack buffer varying read  " + constSizeStr<matchBufSize> + " / ";
+		static const std::string wrHeapPrefixStr  = "Heap buffer write         " + constSizeStr<matchBufSize> + " / ";
+		static const std::string rdHeapPrefixStr  = "Heap buffer read          " + constSizeStr<matchBufSize> + " / ";
+		static const std::string bfHeapPrefixStr  = "Heap buffer read (raw)    " + constSizeStr<matchBufSize> + " / ";
+		static const std::string wriHeapPrefixStr = "Heap buffer varying write " + constSizeStr<matchBufSize> + " / ";
+		static const std::string rdiHeapPrefixStr = "Heap buffer varying read  " + constSizeStr<matchBufSize> + " / ";
 		#define TEST_(MEM_, SIZE0_, SIZE1_) { \
 			testPayload(batch, matchBufSize, \
-				wr ## MEM_ ## PrefixStr + constSizeStr<SIZE0_ | SIZE1_>, write_file<SIZE0_, SIZE1_>, \
-				rd ## MEM_ ## PrefixStr + constSizeStr<SIZE0_ | SIZE1_>, read_file<SIZE0_, SIZE1_>, \
-				bf ## MEM_ ## PrefixStr + constSizeStr<SIZE0_ | SIZE1_>, read_buffer<SIZE0_, SIZE1_> ); \
+				wr  ## MEM_ ## PrefixStr + constSizeStr<SIZE0_ | SIZE1_>, write_file<SIZE0_, SIZE1_>, \
+				rd  ## MEM_ ## PrefixStr + constSizeStr<SIZE0_ | SIZE1_>, read_file<SIZE0_, SIZE1_>, \
+				bf  ## MEM_ ## PrefixStr + constSizeStr<SIZE0_ | SIZE1_>, read_buffer<SIZE0_, SIZE1_>, \
+				wri ## MEM_ ## PrefixStr + constSizeStr<SIZE0_ | SIZE1_>, write_file_inconsistent<SIZE0_, SIZE1_>, \
+				rdi ## MEM_ ## PrefixStr + constSizeStr<SIZE0_ | SIZE1_>, read_file_inconsistent<SIZE0_, SIZE1_> ); \
 		}
 		TEST_(Stack, tinyBufSize,  0)
 		TEST_(Stack, smallBufSize, 0)
