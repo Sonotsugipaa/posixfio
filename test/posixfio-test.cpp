@@ -102,7 +102,7 @@ namespace {
 
 	std::string mkPayload() {
 		static constexpr size_t payloadSize = 8192;
-		static size_t state = 0;
+		static size_t state = 1;
 		std::string r;  r.reserve(payloadSize);
 		auto rng = std::minstd_rand(state = (payloadSize ^ state));
 		for(size_t i=0; i < payloadSize; ++i) {

@@ -1,4 +1,5 @@
-#include "../../include/posixfio_tl.hpp"
+#include "../../include/unix/posixfio.hpp"
+#include "../../include/unix/posixfio_tl.hpp"
 
 #include <cerrno>
 #include <cassert>
@@ -12,11 +13,89 @@
 namespace posixfio {
 
 	#ifdef POSIXFIO_NOTHROW
-		#define POSIXFIO_THROWERRNO(FD_, DO_) DO_
+		#define POSIXFIO_THROWERRNO(FD_, DO_) DO_;
 		namespace no_throw {
 	#else
 		#define POSIXFIO_THROWERRNO(FD_, DO_) throw FileError(FD_, errno)
 	#endif
+
+
+	MemMapping::MemMapping(MemMapping&& mv) noexcept:
+			addr(mv.addr),
+			len(mv.len)
+	{
+		mv.disown();
+	}
+
+
+	MemMapping& MemMapping::operator=(MemMapping&& mv) noexcept {
+		this->~MemMapping();
+		return * new (this) MemMapping(std::move(mv));
+	}
+
+
+	MemMapping::~MemMapping() {
+		if(addr != nullptr) {
+			assert(len > 0);
+			munmap();
+			addr = nullptr;
+			len = 0;
+		}
+	};
+
+
+	bool MemMapping::munmap() {
+		assert(addr != nullptr);
+		assert(len > 0);
+		auto res = ::munmap(addr, len);
+		if(res == 0) [[likely]] {
+			addr = nullptr;
+			len = 0;
+			return true;
+		} else {
+			#ifdef POSIXFIO_NOTHROW
+				return false;
+			#else
+				throw Errcode(errno);
+			#endif
+		}
+	}
+
+
+	bool MemMapping::mlock() {
+		assert(addr != nullptr);
+		assert(len > 0);
+		#ifdef POSIXFIO_NOTHROW
+			return 0 == ::mlock(addr, len);
+		#else
+			if(0 != ::mlock(addr, len)) [[unlikely]] throw Errcode(errno);
+			return true;
+		#endif
+	}
+
+
+	bool MemMapping::munlock() {
+		assert(addr != nullptr);
+		assert(len > 0);
+		#ifdef POSIXFIO_NOTHROW
+			return 0 == ::munlock(addr, len);
+		#else
+			if(0 != ::munlock(addr, len)) [[unlikely]] throw Errcode(errno);
+			return true;
+		#endif
+	}
+
+
+	bool MemMapping::msync(MemSyncFlags flags) {
+		assert(addr != nullptr);
+		assert(len > 0);
+		#ifdef POSIXFIO_NOTHROW
+			return 0 == ::msync(addr, len, int(flags));
+		#else
+			if(0 != ::msync(addr, len, int(flags))) [[unlikely]] throw Errcode(errno);
+			return true;
+		#endif
+	}
 
 
 	File File::open(const char* pathname, int flags, posixfio::mode_t mode) {
@@ -167,6 +246,17 @@ namespace posixfio {
 			POSIXFIO_THROWERRNO(fd_, (void) 0);
 		}
 		return res;
+	}
+
+
+	MemMapping File::mmap(void* addr, size_t len, MemProtFlags prot, MemMapFlags flags, off_t off) {
+		if(len < 1) return MemMapping();
+		MemMapping r;
+		auto r_addr = ::mmap(addr, len, int(prot), int(flags), fd_, off);
+		if(r_addr == MAP_FAILED) [[unlikely]] POSIXFIO_THROWERRNO(fd_, return MemMapping());
+		r.addr = r_addr;
+		r.len = len;
+		return r;
 	}
 
 

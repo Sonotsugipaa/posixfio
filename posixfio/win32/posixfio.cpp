@@ -1,4 +1,5 @@
-#include "posixfio.hpp"
+#include "../../include/win32/posixfio.hpp"
+#include "../../include/win32/posixfio_tl.hpp"
 
 #include <cerrno>
 #include <cassert>

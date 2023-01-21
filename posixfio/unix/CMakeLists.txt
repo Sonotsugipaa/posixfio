@@ -3,17 +3,15 @@ set(PROJECT_LIBRARY_DIR ..)
 
 set(POSIXFIO_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/include/unix")
 
-add_library(posixfio SHARED
-	posixfio.cpp
-	../posixfio_tl.cpp )
-
-target_compile_definitions(posixfio PUBLIC POSIXFIO_UNIX)
-
 if(POSIXFIO_LOCAL)
+	add_library(posixfio STATIC posixfio.cpp ../posixfio_tl.cpp)
 	target_include_directories(posixfio PUBLIC ${POSIXFIO_INCLUDE_DIR})
 else()
+	add_library(posixfio SHARED posixfio.cpp ../posixfio_tl.cpp)
 	target_include_directories(posixfio PRIVATE ${POSIXFIO_INCLUDE_DIR})
 endif(POSIXFIO_LOCAL)
+
+target_compile_definitions(posixfio PUBLIC POSIXFIO_UNIX)
 
 set_target_properties(
 	posixfio PROPERTIES
