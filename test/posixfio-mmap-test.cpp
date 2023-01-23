@@ -87,7 +87,7 @@ namespace {
 			f = File::open(tmpFile.c_str(), O_RDWR | O_CREAT | O_TRUNC, 0600);
 			if(f) {
 				f.ftruncate(ioPayload.size());
-				MemMapping map = f.mmap(ioPayload.size(), MemProtFlags::eWrite, MemMapFlags::eShared);
+				MemMapping map = f.mmap(ioPayload.size(), MemProtFlags::eWrite, MemMapFlags::eShared, 0);
 				auto addr = map.get<char>();
 				auto len = map.size();
 				if(addr == nullptr) {
@@ -114,7 +114,7 @@ namespace {
 		try {
 			f = File::open(tmpFile.c_str(), O_RDONLY);
 			if(f) {
-				MemMapping map = f.mmap(ioPayload.size(), MemProtFlags::eRead, MemMapFlags::eShared);
+				MemMapping map = f.mmap(ioPayload.size(), MemProtFlags::eRead, MemMapFlags::eShared, 0);
 				auto addr = map.get<char>();
 				auto len = map.size();
 				if(addr == nullptr) {

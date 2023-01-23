@@ -173,7 +173,7 @@ namespace posixfio {
 
 		/** POSIX-compliant. */
 		[[nodiscard]]
-		inline MemMapping mmap(size_t len, MemProtFlags prot, MemMapFlags flags) { return mmap(nullptr, len, prot, flags, 0); }
+		inline MemMapping mmap(size_t len, MemProtFlags prot, MemMapFlags flags, off_t off) { return mmap(nullptr, len, prot, flags, off); }
 
 		inline operator bool() const { return fd_ >= 0; }
 		inline bool operator!() const { return ! operator bool(); }
