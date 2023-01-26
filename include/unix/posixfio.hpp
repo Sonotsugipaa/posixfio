@@ -87,10 +87,11 @@ namespace posixfio {
 		/** Almost POSIX-compliant: returns `false` exclusively when an error occurs. */
 		bool msync(MemSyncFlags flags = MemSyncFlags::eSync);
 
-		template<typename T = void> T* get() noexcept { return reinterpret_cast<T*>(addr); }
-		template<typename T = void> const T* get() const noexcept { return reinterpret_cast<const T*>(addr); }
+		template<typename T = void> inline T* get() noexcept { return reinterpret_cast<T*>(addr); }
+		template<typename T = void> inline const T* get() const noexcept { return reinterpret_cast<const T*>(addr); }
 
-		size_t size() const { return len; }
+		inline size_t size() const { return len; }
+		inline operator bool() const { return addr != nullptr; }
 	};
 
 
@@ -176,7 +177,6 @@ namespace posixfio {
 		inline MemMapping mmap(size_t len, MemProtFlags prot, MemMapFlags flags, off_t off) { return mmap(nullptr, len, prot, flags, off); }
 
 		inline operator bool() const { return fd_ >= 0; }
-		inline bool operator!() const { return ! operator bool(); }
 		inline fd_t fd() const { return fd_; }
 		inline operator fd_t() const { return fd_; }
 	};
