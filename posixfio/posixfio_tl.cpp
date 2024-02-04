@@ -409,10 +409,10 @@ namespace posixfio {
 	ssize_t OutputBuffer::writeLeast(const void* buf, size_t least, size_t count) {
 		ssize_t total = 0;
 		while(size_t(total) < least) {
-			auto rd = _buffer_op_impl::bfWrite(file_, buffer_, &begin_, &end_, capacity_, buf, ssize_t(count) - total);
-			if(rd == 0) [[unlikely]] return total;
-			if(rd < 0) [[unlikely]] return -1;
-			total += rd;
+			auto wr = _buffer_op_impl::bfWrite(file_, buffer_, &begin_, &end_, capacity_, buf, ssize_t(count) - total);
+			if(wr == 0) [[unlikely]] return total;
+			if(wr < 0) [[unlikely]] return -1;
+			total += wr;
 		}
 		return total;
 	}

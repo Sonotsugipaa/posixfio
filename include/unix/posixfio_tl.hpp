@@ -74,7 +74,9 @@ namespace posixfio {
 		/** Similar to readLeast, but may fail after a partial read. */
 		ssize_t readLeast(void* buf, size_t least, size_t count);
 
-		/** Try to fill the buffer, if it isn't already full. */
+		/** Try to fill the buffer, if it isn't already full;
+		 * returns the number of characters read by the attempt
+		 * (not the total capacity), following File::read semantics. */
 		ssize_t fill();
 
 		/** If the buffer is empty, try to fill it; then discard one byte.
