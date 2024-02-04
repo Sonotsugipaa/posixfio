@@ -18,7 +18,7 @@
 	if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
 		add_compile_options(-Wall -Wextra -Wpedantic)
 	elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
-		# add_compile_options(\\Wall) # How...?
+		add_compile_options(/DNOMINMAX)
 	else()
 		message(WARNING "Toolchain \"${CMAKE_CXX_COMPILER_ID}\" not recognized by the project")
 	endif()

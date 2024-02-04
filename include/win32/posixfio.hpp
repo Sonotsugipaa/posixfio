@@ -1,12 +1,12 @@
 #pragma once
 
-extern "C" {
-	#include <fcntl.h>
-}
-
 #include <cstdint>
 #include <new>
 #include <type_traits>
+
+#include <windows.h>
+
+#include "posixfio_compat_constants.hpp"
 
 
 
@@ -17,7 +17,7 @@ namespace posixfio {
 	#endif
 
 
-	using fd_t = int;
+	using fd_t = HANDLE;
 
 	// These aliases are the easiest solution for portability, but they may limit how
 	// functions are implemented for each environment.
@@ -56,10 +56,10 @@ namespace posixfio {
 		fd_t fd_;
 
 	public:
-		static constexpr fd_t NULL_FD = -1;
+		static constexpr fd_t NULL_FD = INVALID_HANDLE_VALUE;
 
 		/** POSIX-compliant. */
-		static File open(const char* pathname, int flags, mode_t mode = 00660);
+		static File open(const char* pathname, OpenFlagBits flags, mode_t mode = 00660);
 
 		/** POSIX-compliant. */
 		static File creat(const char* pathname, mode_t mode);
@@ -89,11 +89,11 @@ namespace posixfio {
 		/** POSIX-compliant. */
 		File dup2(fd_t fildes2) const;
 
-		/** POSIX-compliant. */
-		ssize_t read(void* buf, size_t count);
+		/** POSIX-compliant, but constrained to 31-bit integer values by the Win32 API. */
+		std::make_signed_t<DWORD> read(void* buf, DWORD count);
 
-		/** POSIX-compliant. */
-		ssize_t write(const void* buf, size_t count);
+		/** POSIX-compliant, but constrained to 31-bit integer values by the Win32 API. */
+		std::make_signed_t<DWORD> write(const void* buf, DWORD count);
 
 		/** POSIX-compliant. */
 		off_t lseek(off_t offset, int whence);
@@ -107,8 +107,7 @@ namespace posixfio {
 		/** Almost POSIX-compliant: returns `false` exclusively when an error occurs. */
 		bool fdatasync();
 
-		inline operator bool() const { return fd_ >= 0; }
-		inline bool operator!() const { return ! operator bool(); }
+		inline operator bool() const { return fd_ != NULL_FD; }
 		inline fd_t fd() const { return fd_; }
 		inline operator fd_t() const { return fd_; }
 	};

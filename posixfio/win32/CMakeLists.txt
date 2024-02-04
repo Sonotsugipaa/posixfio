@@ -3,7 +3,11 @@ set(PROJECT_LIBRARY_DIR ..)
 
 set(POSIXFIO_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/include/win32")
 
-add_library(posixfio STATIC posixfio.cpp ../posixfio_tl.cpp)
+add_library(posixfio STATIC
+	posixfio.cpp
+	../posixfio_tl.cpp )
+
+target_compile_definitions(posixfio PUBLIC POSIXFIO_WIN32)
 
 if(POSIXFIO_LOCAL)
 	target_include_directories(posixfio PUBLIC ${POSIXFIO_INCLUDE_DIR})
@@ -21,6 +25,7 @@ set_target_properties(
 if(NOT POSIXFIO_LOCAL)
 	install(TARGETS posixfio DESTINATION lib)
 	install(FILES
+		"${POSIXFIO_INCLUDE_DIR}/posixfio_compat_constants.hpp"
 		"${POSIXFIO_INCLUDE_DIR}/posixfio.hpp"
 		"${POSIXFIO_INCLUDE_DIR}/posixfio_tl.hpp"
 		DESTINATION include )
