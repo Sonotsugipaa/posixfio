@@ -95,7 +95,7 @@ namespace {
 	#define CATCH_ERRNO_(OS_) catch(Errno& errNo) { OS_ << "ERRNO " << errno_str(errNo.errcode) << ' ' << errNo.errcode << std::endl; }
 
 
-	utest::ResultType requireErrno(std::ostream& out, int expect, int (*fn)(std::ostream& out)) {
+	int requireErrno(std::ostream& out, int expect, int (*fn)(std::ostream& out)) {
 		int got;
 		try {
 			got = fn(out);
@@ -104,13 +104,11 @@ namespace {
 		}
 		if(got != expect) {
 			out << "Expected errno " << errno_str(expect) << ", got " << errno_str(got) << std::endl;
-			return eFailure;
-		} else {
-			return eSuccess;
 		}
+		return got;
 	}
 
-	utest::ResultType requireFileError(std::ostream& out, int expect, int (*fn)(std::ostream& out)) {
+	int requireFileError(std::ostream& out, int expect, int (*fn)(std::ostream& out)) {
 		int got;
 		try {
 			got = fn(out);
@@ -119,10 +117,8 @@ namespace {
 		}
 		if(got != expect) {
 			out << "Expected file error " << errno_str(expect) << ", got " << errno_str(got) << std::endl;
-			return eFailure;
-		} else {
-			return eSuccess;
 		}
+		return got;
 	}
 
 
@@ -341,7 +337,7 @@ namespace {
 
 
 	utest::ResultType fileerror_file_ebadf(std::ostream& out) {
-		return requireFileError(out, EBADF, [](std::ostream& out) {
+		int r = requireFileError(out, EBADF, [](std::ostream& out) {
 			auto f = File::open(tmpFile.c_str(), O_RDONLY | O_CREAT);
 			ssize_t wr = f.write(tmpFile.c_str(), 1); // Can't write to a RDONLY file
 			switch(wr) {
@@ -354,10 +350,18 @@ namespace {
 				}
 			}
 		});
+		if(r == EBADF) return eSuccess;
+		#ifdef WIN32
+				if(r == EACCES) {
+					out << "File R/W protection errors make sense, but they are inconsistent with POSIX" << std::endl;
+					return eNeutral;
+				}
+		#endif
+		return eFailure;
 	}
 
 	utest::ResultType fileerror_buffer_ebadf(std::ostream& out) {
-		return requireFileError(out, EBADF, [](std::ostream& out) {
+		int r = requireFileError(out, EBADF, [](std::ostream& out) {
 			auto f = File::open(tmpFile.c_str(), O_WRONLY | O_CREAT | O_TRUNC);
 			auto fb = posixfio::InputBuffer(f, 1);
 			ssize_t rd = fb.fwd(); // Can't read from a WRONLY file
@@ -371,10 +375,18 @@ namespace {
 				}
 			}
 		});
+		if(r == EBADF) return eSuccess;
+		#ifdef WIN32
+			if(r == EACCES) {
+				out << "File R/W protection errors make sense, but they are inconsistent with POSIX" << std::endl;
+				return eNeutral;
+			}
+		#endif
+		return eFailure;
 	}
 
 	utest::ResultType errno_buffer_ebadf(std::ostream& out) {
-		return requireErrno(out, EBADF, [](std::ostream& out) {
+		int r = requireErrno(out, EBADF, [](std::ostream& out) {
 			auto f = File::open(tmpFile.c_str(), O_WRONLY | O_CREAT | O_TRUNC);
 			auto fb = posixfio::InputBuffer(f, 1);
 			ssize_t rd = fb.fwd(); // Can't read from a WRONLY file
@@ -388,6 +400,14 @@ namespace {
 				}
 			}
 		});
+		if(r == EBADF) return eSuccess;
+		#ifdef WIN32
+		if(r == EACCES) {
+			out << "File R/W protection errors make sense, but they are inconsistent with POSIX" << std::endl;
+			return eNeutral;
+		}
+		#endif
+		return eFailure;
 	}
 
 

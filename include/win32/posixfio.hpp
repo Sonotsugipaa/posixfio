@@ -4,7 +4,7 @@
 #include <new>
 #include <type_traits>
 
-#include <handleapi.h>
+#include <windows.h>
 
 #include "posixfio_compat_constants.hpp"
 

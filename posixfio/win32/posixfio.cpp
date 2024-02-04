@@ -10,42 +10,38 @@
 inline namespace posixfio_w32_impl {
 
 	DWORD desired_access_from_openflags(OpenFlagBits f) {
-		#define CMP_(W_, OF_) ( (W_) * (((OF_) & f) != 0) )
-		return
-			CMP_(FILE_GENERIC_READ,  O_RDONLY) |
-			CMP_(FILE_GENERIC_WRITE, O_WRONLY);
-		#undef CMP_
+		DWORD r = 0;
+		if(f & O_RDONLY) r =     FILE_GENERIC_READ;
+		if(f & O_WRONLY) r = r | FILE_GENERIC_WRITE;
+		return r;
 	}
 
 	DWORD sharing_mode_from_openflags(OpenFlagBits f) {
-		#define CMP_(W_, OF_) ( (W_) * (((OF_) & f) != 0) )
-		return
-			CMP_(FILE_SHARE_DELETE, O_TRUNC) |
-			CMP_(FILE_SHARE_READ,   O_RDONLY) |
-			CMP_(FILE_SHARE_WRITE,  O_WRONLY);
-		#undef CMP_
+		DWORD r = 0;
+		if(f & O_TRUNC)  r =     FILE_SHARE_DELETE;
+		if(f & O_RDONLY) r = r | FILE_SHARE_READ;
+		if(f & O_WRONLY) r = r | FILE_SHARE_WRITE;
+		return r;
 	}
 
 	DWORD creation_disposition_from_openflags(OpenFlagBits f) {
-		#define CMP_(W_, OF_) ( (W_) * (((OF_) & f) != 0) )
-		return
-			CMP_(CREATE_ALWAYS,     O_CREAT & O_TRUNC) |
-			CMP_(CREATE_NEW,        O_CREAT & ~O_TRUNC) |
-			CMP_(TRUNCATE_EXISTING, O_TRUNC & ~O_CREAT);
-		#undef CMP_
+		DWORD r = 0;
+		bool trunc = f & O_TRUNC;
+		bool creat = f & O_CREAT;
+		if(trunc && creat) return CREATE_ALWAYS;
+		if(creat) return OPEN_ALWAYS;
+		if(trunc) return TRUNCATE_EXISTING;
+		return OPEN_EXISTING;
 	}
 
 	DWORD flags_and_attributes_from_openflags(OpenFlagBits f) {
-		#define CMP_(OF_, W_) ( (W_) * (((OF_) & f) != 0) )
-		DWORD r =
-			CMP_(O_TMPFILE, FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE);
-		if(r == 0) r = FILE_ATTRIBUTE_NORMAL;
-		r = r |
-			CMP_(O_DIRECT,         FILE_FLAG_NO_BUFFERING) |
-			CMP_(O_SYNC | O_DSYNC, FILE_FLAG_WRITE_THROUGH) |
-			FILE_FLAG_POSIX_SEMANTICS;
+		DWORD r = FILE_FLAG_POSIX_SEMANTICS;
+		if(f & O_TMPFILE) r = r | FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE;
+		else              r = r | FILE_ATTRIBUTE_NORMAL;
+		if(f & O_DIRECT)  r = r | FILE_FLAG_NO_BUFFERING;
+		if(f & O_SYNC)    r = r | FILE_FLAG_WRITE_THROUGH;
+		if(f & O_DSYNC)   r = r | FILE_FLAG_WRITE_THROUGH;
 		return r;
-		#undef CMP_
 	}
 
 
@@ -55,13 +51,15 @@ inline namespace posixfio_w32_impl {
 			case ERROR_FILE_NOT_FOUND:      [[fallthrough]];
 			case ERROR_PATH_NOT_FOUND:      return { fd, ENOENT };
 			case ERROR_TOO_MANY_OPEN_FILES: return { fd, EMFILE };
-			case ERROR_ACCESS_DENIED:       [[fallthrough]];
+			case ERROR_ACCESS_DENIED:       return { fd, EACCES };
 			case ERROR_WRITE_PROTECT:       return { fd, EACCES };
 			case ERROR_INVALID_HANDLE:      return { fd, EBADF };
 			case ERROR_OUTOFMEMORY:         [[fallthrough]];
 			case ERROR_NOT_ENOUGH_MEMORY:   return { fd, ENOMEM };
 			case ERROR_SHARING_VIOLATION:   return { fd, EBUSY };
 			case ERROR_SEEK:                return { fd, ENXIO };
+			case ERROR_INVALID_PARAMETER:   return { fd, EINVAL };
+			case NO_ERROR:                  return { fd, 0 };
 			default: return { fd, EIO };
 		}
 	}

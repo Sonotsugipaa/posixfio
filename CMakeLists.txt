@@ -18,7 +18,7 @@
 	if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
 		add_compile_options(-Wall -Wextra -Wpedantic)
 	elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
-		# add_compile_options(\\Wall) # How...?
+		add_compile_options(/DNOMINMAX)
 	else()
 		message(WARNING "Toolchain \"${CMAKE_CXX_COMPILER_ID}\" not recognized by the project")
 	endif()
@@ -48,8 +48,10 @@
 	# add_compile_definitions(POSIXFIO_NOTHROW)
 
 	if(UNIX)
+		add_compile_definitions(UNIX)
 		add_subdirectory(posixfio/unix)
 	elseif(WIN32)
+		add_compile_definitions(WIN32)
 		add_subdirectory(posixfio/win32)
 	else()
 		message(FATAL_ERROR "Unknown platform")
