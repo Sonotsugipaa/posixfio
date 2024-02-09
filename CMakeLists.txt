@@ -2,7 +2,7 @@
 
 	cmake_minimum_required(VERSION 3.20)
 	project(posixfio
-		VERSION "0.4.1"
+		VERSION "0.5.0"
 		DESCRIPTION "Simple C++ wrapper around basic POSIX file IO functions." )
 
 
@@ -26,7 +26,7 @@
 
 # Define the C++ standard to use
 
-	set(CMAKE_CXX_STANDARD 20)
+	set(CMAKE_CXX_STANDARD 23)
 	set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 
