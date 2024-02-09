@@ -8,16 +8,23 @@
 
 
 
+namespace std {
+	// This isn't available in the STL, as of writing
+	constexpr void unreachable() { __assume(false); }
+}
+
+
+
 inline namespace posixfio_w32_impl {
 
-	DWORD desired_access_from_openflags(OpenFlagBits f) {
+	constexpr DWORD desired_access_from_openflags(OpenFlagBits f) {
 		DWORD r = 0;
 		if(f & O_RDONLY) r =     FILE_GENERIC_READ;
 		if(f & O_WRONLY) r = r | FILE_GENERIC_WRITE;
 		return r;
 	}
 
-	DWORD sharing_mode_from_openflags(OpenFlagBits f) {
+	constexpr DWORD sharing_mode_from_openflags(OpenFlagBits f) {
 		DWORD r = 0;
 		if(f & O_TRUNC)  r =     FILE_SHARE_DELETE;
 		if(f & O_RDONLY) r = r | FILE_SHARE_READ;
@@ -25,7 +32,7 @@ inline namespace posixfio_w32_impl {
 		return r;
 	}
 
-	DWORD creation_disposition_from_openflags(OpenFlagBits f) {
+	constexpr DWORD creation_disposition_from_openflags(OpenFlagBits f) {
 		DWORD r = 0;
 		bool trunc = f & O_TRUNC;
 		bool creat = f & O_CREAT;
@@ -35,7 +42,7 @@ inline namespace posixfio_w32_impl {
 		return OPEN_EXISTING;
 	}
 
-	DWORD flags_and_attributes_from_openflags(OpenFlagBits f) {
+	constexpr DWORD flags_and_attributes_from_openflags(OpenFlagBits f) {
 		DWORD r = FILE_FLAG_POSIX_SEMANTICS;
 		if(f & O_TMPFILE) r = r | FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE;
 		else              r = r | FILE_ATTRIBUTE_NORMAL;
@@ -43,6 +50,14 @@ inline namespace posixfio_w32_impl {
 		if(f & O_SYNC)    r = r | FILE_FLAG_WRITE_THROUGH;
 		if(f & O_DSYNC)   r = r | FILE_FLAG_WRITE_THROUGH;
 		return r;
+	}
+
+
+	template <typename T>
+	constexpr void mk_dword_2(DWORD dst[2], T s) {
+		static_assert(2 * sizeof(DWORD) == sizeof(T));
+		dst[0] =      (DWORD(s)         ) & (~DWORD(0));
+		dst[1] = DWORD(    T(s) >> T(32)) & (~DWORD(0));
 	}
 
 
@@ -72,11 +87,58 @@ inline namespace posixfio_w32_impl {
 namespace posixfio {
 
 	#ifdef POSIXFIO_NOTHROW
-		#define POSIXFIO_THROWERRNO(FD_, DO_) { DO_ }
+		#define POSIXFIO_THROWERRNO(FD_, DO_) { if(FD_ != INVALID_HANDLE_VALUE) { errno = fetch_file_error(FD_).errcode; } DO_ }
 		namespace no_throw {
 	#else
 		#define POSIXFIO_THROWERRNO(FD_, DO_) { auto e = fetch_file_error(FD_);  errno = e.errcode;  throw e; }
 	#endif
+
+
+	MemMapping::MemMapping(MemMapping&& mv) noexcept:
+		handle(mv.handle),
+		addr(mv.addr),
+		len(mv.len)
+	{
+		mv.disown();
+	}
+
+
+	MemMapping& MemMapping::operator=(MemMapping&& mv) noexcept {
+		this->~MemMapping();
+		return * new (this) MemMapping(std::move(mv));
+	}
+
+
+	MemMapping::~MemMapping() {
+		if(addr != nullptr) {
+			assert(len > 0);
+			munmap();
+			handle = INVALID_HANDLE_VALUE;
+			addr = nullptr;
+			len = 0;
+		}
+	};
+
+
+	bool MemMapping::munmap() {
+		assert(addr != nullptr);
+		assert(len > 0);
+		bool r;
+		r = UnmapViewOfFile(addr);
+		if(! r) POSIXFIO_THROWERRNO(handle, (void) 0);
+		r = r | CloseHandle(handle);
+		if(! r) POSIXFIO_THROWERRNO(handle, (void) 0);
+		return r;
+	}
+
+
+	bool MemMapping::msync(MemSyncFlags flags) {
+		assert(addr != nullptr);
+		assert(len > 0);
+		bool r = FlushViewOfFile(addr, len);
+		if(! r) POSIXFIO_THROWERRNO(handle, (void) 0);
+		return r;
+	}
 
 
 	File File::open(const char* pathname, OpenFlagBits flags, posixfio::mode_t mode) {
@@ -207,12 +269,98 @@ namespace posixfio {
 
 
 	off_t File::lseek(off_t offset, int whence) {
-		LARGE_INTEGER li = { .QuadPart = offset };
-		bool seek = SetFilePointerEx(fd_, li, nullptr, whence);
-		if(! seek) {
-			POSIXFIO_THROWERRNO(fd_, (void) 0);
+		LARGE_INTEGER offsetLi = { .QuadPart = offset };
+		LARGE_INTEGER r;
+		bool seek = SetFilePointerEx(fd_, offsetLi, &r, whence);
+		if(! seek) POSIXFIO_THROWERRNO(fd_, return -1);
+		return r.QuadPart;
+	}
+
+
+	bool File::ftruncate(off_t length) {
+		off_t cur;
+		#ifdef POSIXFIO_NOTHROW
+			#warning "This is untested"
+			cur = lseek(0, SEEK_CUR);
+			if(cur == -1) [[unlikely]] return false;
+			if(cur != length) {
+				off_t truncAt = lseek(length, SEEK_SET);
+				if(truncAt == -1) [[unlikely]] {
+					auto prevErrno = errno;
+					lseek(0, SEEK_CUR);
+					errno = prevErrno;
+					return false;
+				}
+			}
+			bool r = SetEndOfFile(fd_);
+			#define COMMA ,
+				if(! r) POSIXFIO_THROWERRNO(fd_, lseek(cur COMMA SEEK_SET););
+			#undef COMMA
+			if(cur != length) cur = lseek(cur, SEEK_SET);
+			if(! r) POSIXFIO_THROWERRNO(fd_, return false);
+			return true;
+		#else
+			cur = lseek(0, SEEK_CUR);
+			if(cur != length) {
+				try {
+					lseek(length, SEEK_SET); // Could realistically fail for `length` being out of bounds
+				} catch(...) {
+					lseek(cur, SEEK_SET);
+					std::rethrow_exception(std::current_exception());
+				}
+				bool r = SetEndOfFile(fd_);
+				if(! r) POSIXFIO_THROWERRNO(fd_, (void) 0);
+				lseek(cur, SEEK_SET);
+			} else {
+				bool r = SetEndOfFile(fd_);
+				if(! r) POSIXFIO_THROWERRNO(fd_, (void) 0);
+			}
+			return true;
+		#endif
+	}
+
+
+	MemMapping File::mmap(void* addr, size_t len, MemProtFlags prot, MemMapFlags flags, off_t off) {
+		if(len < 1) return MemMapping();
+		MemMapping r;
+		SECURITY_ATTRIBUTES sec;
+		sec.nLength = sizeof(SECURITY_ATTRIBUTES);
+		sec.lpSecurityDescriptor = nullptr;
+		sec.bInheritHandle = bool(int(prot) & int(MemMapFlags::eShared));
+		DWORD protFlag;
+		DWORD desiredAccess;
+		DWORD off2[2]; mk_dword_2(off2, off);
+		DWORD len2[2]; mk_dword_2(len2, len);
+		switch(int(prot)) {
+			default: std::unreachable(); [[fallthrough]];
+			case 0:
+				protFlag = 0; desiredAccess = 0; break;
+			case int(MemProtFlags::eRead):
+				protFlag = PAGE_READONLY; desiredAccess = FILE_MAP_READ; break;
+			case int(MemProtFlags::eExec):
+				protFlag = PAGE_EXECUTE; desiredAccess = 0; break;
+			case int(MemProtFlags::eWrite): [[fallthrough]];
+			case int(MemProtFlags::eRead) | int(MemProtFlags::eWrite):
+				protFlag = PAGE_READWRITE; desiredAccess = FILE_MAP_WRITE; break;
+			case int(MemProtFlags::eRead) | int(MemProtFlags::eExec):
+				protFlag = PAGE_EXECUTE_READ; desiredAccess = FILE_MAP_READ; break;
+			case int(MemProtFlags::eWrite) | int(MemProtFlags::eExec): [[fallthrough]];
+			case int(MemProtFlags::eRead) | int(MemProtFlags::eWrite) | int(MemProtFlags::eExec):
+				protFlag = PAGE_EXECUTE_READWRITE; desiredAccess = FILE_MAP_WRITE; break;
 		}
-		return seek;
+		r.handle = CreateFileMappingA(fd_, &sec, protFlag, len2[1], len2[0], nullptr);
+		if(r.handle == 0) [[unlikely]] r.handle = NULL_FD; // INVALID_HANDLE_VALUE != 0, but MapViewOfFile can't have a 0. WHY WINDOWS WHY WHY WHY WHY WHY WHY WHY WHY WHY WHY WHY WHY WHY WHY WHY WHY WHY WHY WHY WHY? ARE YOU REGARDED?!?
+		if(r.handle == NULL_FD) POSIXFIO_THROWERRNO(fd_, (void) 0);
+		r.addr = MapViewOfFile(r.handle, desiredAccess, off2[1], off2[0], len);
+		if(r.addr == nullptr) {
+			bool handleClosed = CloseHandle(r.handle);
+			assert(handleClosed); (void) handleClosed;
+			#define COMMA ,
+				POSIXFIO_THROWERRNO(fd_, return { .handle = NULL_FD COMMA .addr = nullptr COMMA len = 0 });
+			#undef COMMA
+		}
+		r.len = len;
+		return r;
 	}
 
 

@@ -51,20 +51,21 @@ namespace posixfio {
 
 	enum class MemSyncFlags : int {
 		eNone = 0,
-		eAsync = MS_ASYNC,
-		eSync = MS_SYNC,
-		eInvalidate = MS_INVALIDATE
+		eAsync      = 1 << 0,
+		eSync       = 1 << 1,
+		eInvalidate = 1 << 2
 	};
 
 
 	class MemMapping {
 	private:
 		friend File;
+		HANDLE handle;
 		void* addr;
 		size_t len;
 
 	public:
-		MemMapping() noexcept: addr(nullptr), len(0) { }
+		MemMapping() noexcept: handle(INVALID_HANDLE_VALUE), addr(nullptr), len(0) { }
 		MemMapping(const MemMapping&) = delete;
 		MemMapping(MemMapping&&) noexcept;
 		~MemMapping();
@@ -95,17 +96,17 @@ namespace posixfio {
 
 
 	enum class MemProtFlags : int {
-		eNone = PROT_NONE,
-		eRead = PROT_READ,
-		eWrite = PROT_WRITE,
-		eExec = PROT_EXEC
+		eNone  = 0,
+		eRead  = 1 << 2,
+		eWrite = 1 << 1,
+		eExec  = 1 << 0
 	};
 
 	enum class MemMapFlags : int {
-		eNone = 0,
-		eShared = MAP_SHARED,
-		ePrivate = MAP_PRIVATE,
-		eFixed = MAP_FIXED
+		eNone    = 0,
+		eShared  = 1 << 0,
+		ePrivate = 1 << 1,
+		eFixed   = 1 << 2
 	};
 
 
