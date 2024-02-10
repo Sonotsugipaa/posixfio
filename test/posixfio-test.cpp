@@ -1,5 +1,6 @@
 #include "test_tools.hpp"
 
+#define POSIXFIO_STL_STRINGVIEW
 #if defined POSIXFIO_UNIX
 	#include "../include/unix/posixfio.hpp"
 #elif defined POSIXFIO_WIN32
@@ -23,7 +24,7 @@ namespace {
 	constexpr auto eNeutral = utest::ResultType::eNeutral;
 	constexpr auto eSuccess = utest::ResultType::eSuccess;
 
-	const std::string tmpFile = "tmpfile";
+	const std::string tmpFile = "test-tmpfile";
 
 	std::string ioPayload;
 
@@ -116,6 +117,19 @@ namespace {
 		File f;
 		try {
 			f = File::open(tmpFile.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
+		} catch(...) { }
+		if(! f) {
+			out << "ERRNO " << errno << ' ' << errno_str(errno) << '\n';
+			return eFailure;
+		}
+		return eSuccess;
+	}
+
+
+	utest::ResultType open_file_strv(std::ostream& out) {
+		File f;
+		try {
+			f = File::open(std::string_view(tmpFile), O_WRONLY, 0600);
 		} catch(...) { }
 		if(! f) {
 			out << "ERRNO " << errno << ' ' << errno_str(errno) << '\n';
@@ -364,7 +378,8 @@ namespace {
 int main(int, char**) {
 	auto batch = utest::TestBatch(std::cout);
 	batch
-		.run("Create file", create_file);
+		.run("Create file", create_file)
+		.run("Open file (string_view)", open_file_strv);
 	ioPayload = mkPayload();
 	batch
 		.run("Write file", write_file)

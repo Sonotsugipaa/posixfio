@@ -8,6 +8,10 @@
 
 #include "posixfio_compat_constants.hpp"
 
+#ifdef POSIXFIO_STL_STRINGVIEW
+	#include <string_view>
+#endif
+
 
 
 namespace posixfio {
@@ -127,6 +131,17 @@ namespace posixfio {
 
 		/** POSIX-compliant. */
 		static File openat(fd_t dirfd, const char* pathname, int flags, mode_t mode = 0);
+
+		#ifdef POSIXFIO_STL_STRINGVIEW
+			/** POSIX-compliant. */
+			static File open(std::string_view pathname, int flags, mode_t mode = 00660);
+
+			/** POSIX-compliant. */
+			static File creat(std::string_view pathname, mode_t mode);
+
+			/** POSIX-compliant. */
+			static File openat(fd_t dirfd, std::string_view pathname, int flags, mode_t mode = 00660);
+		#endif
 
 
 		File();

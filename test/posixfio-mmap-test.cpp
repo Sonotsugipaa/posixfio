@@ -23,7 +23,7 @@ namespace {
 	constexpr auto eNeutral = utest::ResultType::eNeutral;
 	constexpr auto eSuccess = utest::ResultType::eSuccess;
 
-	const std::string tmpFile = "tmpfile";
+	const std::string tmpFile = "test-tmpfile";
 
 	std::string ioPayload;
 

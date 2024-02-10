@@ -1,3 +1,7 @@
+#ifndef POSIXFIO_STL_STRINGVIEW
+	#define POSIXFIO_STL_STRINGVIEW // The library builds the `std::string_view` variants of File constructors, regardless of their declaration in other translation units
+#endif
+
 #include "../../include/win32/posixfio.hpp"
 #include "../../include/win32/posixfio_tl.hpp"
 
@@ -5,6 +9,8 @@
 #include <cassert>
 #include <utility> // std::move
 #include <new>
+#include <string>
+#include <string_view>
 
 
 
@@ -164,6 +170,15 @@ namespace posixfio {
 		}
 
 		return r;
+	}
+
+
+	File File::open(std::string_view pathname, int flags, posixfio::mode_t mode) {
+		auto len = pathname.size();
+		auto bf = new char[len + 1];
+		memcpy(bf, pathname.data(), len);
+		bf[len] = '\0';
+		return File::open(bf, flags, mode);
 	}
 
 
