@@ -128,7 +128,9 @@ namespace posixfio {
 		auto bf = new char[len + 1];
 		memcpy(bf, pathname.data(), len);
 		bf[len] = '\0';
-		return File::open(bf, flags, mode);
+		auto r = File::open(bf, flags, mode);
+		delete[] bf;
+		return r;
 	}
 
 	File File::creat(std::string_view pathname, posixfio::mode_t mode) {
@@ -136,7 +138,9 @@ namespace posixfio {
 		auto bf = new char[len + 1];
 		memcpy(bf, pathname.data(), len);
 		bf[len] = '\0';
-		return File::creat(bf, mode);
+		auto r = File::creat(bf, mode);
+		delete[] bf;
+		return r;
 	}
 
 	File File::openat(fd_t dirfd, std::string_view pathname, int flags, posixfio::mode_t mode) {
@@ -144,7 +148,9 @@ namespace posixfio {
 		auto bf = new char[len + 1];
 		memcpy(bf, pathname.data(), len);
 		bf[len] = '\0';
-		return File::openat(dirfd, bf, flags, mode);
+		auto r = File::openat(dirfd, bf, flags, mode);
+		delete[] bf;
+		return r;
 	}
 
 
