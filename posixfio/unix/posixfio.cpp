@@ -8,6 +8,7 @@
 #include <cassert>
 #include <utility> // std::move
 #include <new>
+#include <exception>
 #include <string>
 #include <string_view>
 
@@ -125,9 +126,11 @@ namespace posixfio {
 	File File::open(std::string_view pathname, int flags, posixfio::mode_t mode) {
 		auto len = pathname.size();
 		auto bf = new char[len + 1];
+		File r;
 		memcpy(bf, pathname.data(), len);
 		bf[len] = '\0';
-		auto r = File::open(bf, flags, mode);
+		try        { r = File::open(bf, flags, mode); }
+		catch(...) { delete[] bf; std::rethrow_exception(std::current_exception()); }
 		delete[] bf;
 		return r;
 	}
@@ -135,9 +138,11 @@ namespace posixfio {
 	File File::creat(std::string_view pathname, posixfio::mode_t mode) {
 		auto len = pathname.size();
 		auto bf = new char[len + 1];
+		File r;
 		memcpy(bf, pathname.data(), len);
 		bf[len] = '\0';
-		auto r = File::creat(bf, mode);
+		try        { r = File::creat(bf, mode); }
+		catch(...) { delete[] bf; std::rethrow_exception(std::current_exception()); }
 		delete[] bf;
 		return r;
 	}
@@ -145,9 +150,11 @@ namespace posixfio {
 	File File::openat(fd_t dirfd, std::string_view pathname, int flags, posixfio::mode_t mode) {
 		auto len = pathname.size();
 		auto bf = new char[len + 1];
+		File r;
 		memcpy(bf, pathname.data(), len);
 		bf[len] = '\0';
-		auto r = File::openat(dirfd, bf, flags, mode);
+		try        { r = File::openat(dirfd, bf, flags, mode); }
+		catch(...) { delete[] bf; std::rethrow_exception(std::current_exception()); }
 		delete[] bf;
 		return r;
 	}

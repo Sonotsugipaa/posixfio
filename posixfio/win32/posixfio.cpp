@@ -8,6 +8,7 @@
 #include <cassert>
 #include <utility> // std::move
 #include <new>
+#include <exception>
 #include <string>
 #include <string_view>
 
@@ -175,8 +176,11 @@ namespace posixfio {
 	File File::open(std::string_view pathname, int flags, posixfio::mode_t mode) {
 		auto len = pathname.size();
 		auto bf = new char[len + 1];
+		File r;
 		memcpy(bf, pathname.data(), len);
 		bf[len] = '\0';
+		try        { r = File::creat(bf, mode); }
+		catch(...) { delete[] bf; std::rethrow_exception(std::current_exception()); }
 		auto r = File::open(bf, flags, mode);
 		delete[] bf;
 		return r;
