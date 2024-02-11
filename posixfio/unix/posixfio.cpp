@@ -2,7 +2,6 @@
 	#define POSIXFIO_STL_STRINGVIEW // The library builds the `std::string_view` variants of File constructors, regardless of their declaration in other translation units
 #endif
 
-#include "../../include/unix/posixfio.hpp"
 #include "../../include/unix/posixfio_tl.hpp"
 
 #include <cerrno>
