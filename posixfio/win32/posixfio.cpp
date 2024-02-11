@@ -2,7 +2,6 @@
 	#define POSIXFIO_STL_STRINGVIEW // The library builds the `std::string_view` variants of File constructors, regardless of their declaration in other translation units
 #endif
 
-#include "../../include/win32/posixfio.hpp"
 #include "../../include/win32/posixfio_tl.hpp"
 
 #include <cerrno>
@@ -178,7 +177,9 @@ namespace posixfio {
 		auto bf = new char[len + 1];
 		memcpy(bf, pathname.data(), len);
 		bf[len] = '\0';
-		return File::open(bf, flags, mode);
+		auto r = File::open(bf, flags, mode);
+		delete[] bf;
+		return r;
 	}
 
 
