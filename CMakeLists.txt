@@ -2,7 +2,7 @@
 
 	cmake_minimum_required(VERSION 3.20)
 	project(posixfio
-		VERSION "0.3.0"
+		VERSION "0.5.2"
 		DESCRIPTION "Simple C++ wrapper around basic POSIX file IO functions." )
 
 
@@ -18,7 +18,7 @@
 	if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
 		add_compile_options(-Wall -Wextra -Wpedantic)
 	elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
-		# add_compile_options(\\Wall) # How...?
+		add_compile_options(/DNOMINMAX)
 	else()
 		message(WARNING "Toolchain \"${CMAKE_CXX_COMPILER_ID}\" not recognized by the project")
 	endif()
@@ -26,7 +26,7 @@
 
 # Define the C++ standard to use
 
-	set(CMAKE_CXX_STANDARD 20)
+	set(CMAKE_CXX_STANDARD 23)
 	set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 

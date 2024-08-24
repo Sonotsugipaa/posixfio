@@ -1,0 +1,44 @@
+#pragma once
+
+#include <limits>
+
+#include <fileapi.h>
+#include <windows.h>
+
+
+
+inline namespace posixfio_compat {
+
+	using OpenFlagBits = DWORD;
+
+	enum OpenFlags : OpenFlagBits {
+		OPENFLAGS_UNSUPPORTED = ~ DWORD(0x7FFFFFFF),
+		O_RDONLY    = 0x00001,
+		O_WRONLY    = 0x00002,
+		O_RDWR      = 0x00003,
+		O_APPEND    = 0x00004,
+		O_ASYNC     = 0x00008 | OPENFLAGS_UNSUPPORTED,
+		O_CLOEXEC   = 0x00010 | OPENFLAGS_UNSUPPORTED,
+		O_CREAT     = 0x00020,
+		O_DIRECT    = 0x00040,
+		O_DIRECTORY = 0x00080 | OPENFLAGS_UNSUPPORTED,
+		O_DSYNC     = 0x00100,
+		O_EXCL      = 0x00200 | OPENFLAGS_UNSUPPORTED,
+		O_LARGEFILE = 0x00400,
+		O_NOATIME   = 0x00800,
+		O_NOCTTY    = 0x01000 | OPENFLAGS_UNSUPPORTED,
+		O_NOFOLLOW  = 0x02000 | OPENFLAGS_UNSUPPORTED,
+		O_NONBLOCK  = 0x04000 | OPENFLAGS_UNSUPPORTED,
+		O_NDELAY    = 0x04000 | OPENFLAGS_UNSUPPORTED,
+		O_PATH      = 0x08000 | OPENFLAGS_UNSUPPORTED,
+		O_SYNC      = 0x10000,
+		O_TMPFILE   = 0x20000,
+		O_TRUNC     = 0x40000
+	};
+
+
+	static_assert(SEEK_SET == FILE_BEGIN);
+	static_assert(SEEK_CUR == FILE_CURRENT);
+	static_assert(SEEK_END == FILE_END);
+
+}

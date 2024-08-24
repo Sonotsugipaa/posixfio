@@ -20,3 +20,7 @@ target_link_libraries(posixfio-test
 add_executable(posixfio-tl-test posixfio-tl-test.cpp)
 target_link_libraries(posixfio-tl-test
 	test-tools posixfio)
+
+add_executable(posixfio-mmap-test posixfio-mmap-test.cpp)
+target_link_libraries(posixfio-mmap-test
+	test-tools posixfio)

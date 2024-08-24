@@ -1,12 +1,16 @@
 #pragma once
 
-extern "C" {
-	#include <fcntl.h>
-}
-
 #include <cstdint>
 #include <new>
 #include <type_traits>
+
+#include <windows.h>
+
+#include "posixfio_compat_constants.hpp"
+
+#ifdef POSIXFIO_STL_STRINGVIEW
+	#include <string_view>
+#endif
 
 
 
@@ -17,7 +21,7 @@ namespace posixfio {
 	#endif
 
 
-	using fd_t = int;
+	using fd_t = HANDLE;
 
 	// These aliases are the easiest solution for portability, but they may limit how
 	// functions are implemented for each environment.
@@ -49,6 +53,67 @@ namespace posixfio {
 	};
 
 
+	enum class MemSyncFlags : int {
+		eNone = 0,
+		eAsync      = 1 << 0,
+		eSync       = 1 << 1,
+		eInvalidate = 1 << 2
+	};
+
+
+	class MemMapping {
+	private:
+		friend File;
+		HANDLE handle;
+		void* addr;
+		size_t len;
+
+	public:
+		MemMapping() noexcept: handle(INVALID_HANDLE_VALUE), addr(nullptr), len(0) { }
+		MemMapping(const MemMapping&) = delete;
+		MemMapping(MemMapping&&) noexcept;
+		~MemMapping();
+		MemMapping& operator=(const MemMapping&) = delete;
+		MemMapping& operator=(MemMapping&&) noexcept;
+
+		/** Clears the pointer to the allocation, but does not unmap. */
+		void disown() { addr = nullptr; len = 0; }
+
+		/** Almost POSIX-compliant: returns `false` exclusively when an error occurs. */
+		bool munmap();
+
+		/** Almost POSIX-compliant: returns `false` exclusively when an error occurs. */
+		bool mlock();
+
+		/** Almost POSIX-compliant: returns `false` exclusively when an error occurs. */
+		bool munlock();
+
+		/** Almost POSIX-compliant: returns `false` exclusively when an error occurs. */
+		bool msync(MemSyncFlags flags = MemSyncFlags::eSync);
+
+		template<typename T = void> inline T* get() noexcept { return reinterpret_cast<T*>(addr); }
+		template<typename T = void> inline const T* get() const noexcept { return reinterpret_cast<const T*>(addr); }
+
+		inline size_t size() const { return len; }
+		inline operator bool() const { return addr != nullptr; }
+	};
+
+
+	enum class MemProtFlags : int {
+		eNone  = 0,
+		eRead  = 1 << 2,
+		eWrite = 1 << 1,
+		eExec  = 1 << 0
+	};
+
+	enum class MemMapFlags : int {
+		eNone    = 0,
+		eShared  = 1 << 0,
+		ePrivate = 1 << 1,
+		eFixed   = 1 << 2
+	};
+
+
 	class File {
 		friend FileView;
 
@@ -56,16 +121,27 @@ namespace posixfio {
 		fd_t fd_;
 
 	public:
-		static constexpr fd_t NULL_FD = -1;
+		static constexpr fd_t NULL_FD = INVALID_HANDLE_VALUE;
 
 		/** POSIX-compliant. */
-		static File open(const char* pathname, int flags, mode_t mode = 00660);
+		static File open(const char* pathname, OpenFlagBits flags, mode_t mode = 00660);
 
 		/** POSIX-compliant. */
 		static File creat(const char* pathname, mode_t mode);
 
 		/** POSIX-compliant. */
-		static File openat(fd_t dirfd, const char* pathname, int flags, mode_t mode = 0);
+		static File openat(fd_t dirfd, const char* pathname, OpenFlagBits flags, mode_t mode = 0);
+
+		#ifdef POSIXFIO_STL_STRINGVIEW
+			/** POSIX-compliant. */
+			static File open(std::string_view pathname, OpenFlagBits flags, mode_t mode = 00660);
+
+			/** POSIX-compliant. */
+			static File creat(std::string_view pathname, mode_t mode);
+
+			/** POSIX-compliant. */
+			static File openat(fd_t dirfd, std::string_view pathname, OpenFlagBits flags, mode_t mode = 00660);
+		#endif
 
 
 		File();
@@ -89,11 +165,11 @@ namespace posixfio {
 		/** POSIX-compliant. */
 		File dup2(fd_t fildes2) const;
 
-		/** POSIX-compliant. */
-		ssize_t read(void* buf, size_t count);
+		/** POSIX-compliant, but constrained to 31-bit integer values by the Win32 API. */
+		std::make_signed_t<DWORD> read(void* buf, DWORD count);
 
-		/** POSIX-compliant. */
-		ssize_t write(const void* buf, size_t count);
+		/** POSIX-compliant, but constrained to 31-bit integer values by the Win32 API. */
+		std::make_signed_t<DWORD> write(const void* buf, DWORD count);
 
 		/** POSIX-compliant. */
 		off_t lseek(off_t offset, int whence);
@@ -107,8 +183,15 @@ namespace posixfio {
 		/** Almost POSIX-compliant: returns `false` exclusively when an error occurs. */
 		bool fdatasync();
 
-		inline operator bool() const { return fd_ >= 0; }
-		inline bool operator!() const { return ! operator bool(); }
+		/** POSIX-compliant. */
+		[[nodiscard]]
+		MemMapping mmap(void* addr, size_t len, MemProtFlags prot, MemMapFlags flags, off_t off);
+
+		/** POSIX-compliant. */
+		[[nodiscard]]
+		inline MemMapping mmap(size_t len, MemProtFlags prot, MemMapFlags flags, off_t off) { return mmap(nullptr, len, prot, flags, off); }
+
+		inline operator bool() const { return fd_ != NULL_FD; }
 		inline fd_t fd() const { return fd_; }
 		inline operator fd_t() const { return fd_; }
 	};

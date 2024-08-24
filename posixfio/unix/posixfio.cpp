@@ -1,9 +1,16 @@
-#include "../../include/posixfio_tl.hpp"
+#ifndef POSIXFIO_STL_STRINGVIEW
+	#define POSIXFIO_STL_STRINGVIEW // The library builds the `std::string_view` variants of File constructors, regardless of their declaration in other translation units
+#endif
+
+#include "../../include/unix/posixfio_tl.hpp"
 
 #include <cerrno>
 #include <cassert>
 #include <utility> // std::move
 #include <new>
+#include <exception>
+#include <string>
+#include <string_view>
 
 #include <unistd.h>
 
@@ -12,11 +19,89 @@
 namespace posixfio {
 
 	#ifdef POSIXFIO_NOTHROW
-		#define POSIXFIO_THROWERRNO(FD_, DO_) DO_
+		#define POSIXFIO_THROWERRNO(FD_, DO_) DO_;
 		namespace no_throw {
 	#else
 		#define POSIXFIO_THROWERRNO(FD_, DO_) throw FileError(FD_, errno)
 	#endif
+
+
+	MemMapping::MemMapping(MemMapping&& mv) noexcept:
+			addr(mv.addr),
+			len(mv.len)
+	{
+		mv.disown();
+	}
+
+
+	MemMapping& MemMapping::operator=(MemMapping&& mv) noexcept {
+		this->~MemMapping();
+		return * new (this) MemMapping(std::move(mv));
+	}
+
+
+	MemMapping::~MemMapping() {
+		if(addr != nullptr) {
+			assert(len > 0);
+			munmap();
+			addr = nullptr;
+			len = 0;
+		}
+	};
+
+
+	bool MemMapping::munmap() {
+		assert(addr != nullptr);
+		assert(len > 0);
+		auto res = ::munmap(addr, len);
+		if(res == 0) [[likely]] {
+			addr = nullptr;
+			len = 0;
+			return true;
+		} else {
+			#ifdef POSIXFIO_NOTHROW
+				return false;
+			#else
+				throw Errcode(errno);
+			#endif
+		}
+	}
+
+
+	bool MemMapping::mlock() {
+		assert(addr != nullptr);
+		assert(len > 0);
+		#ifdef POSIXFIO_NOTHROW
+			return 0 == ::mlock(addr, len);
+		#else
+			if(0 != ::mlock(addr, len)) [[unlikely]] throw Errcode(errno);
+			return true;
+		#endif
+	}
+
+
+	bool MemMapping::munlock() {
+		assert(addr != nullptr);
+		assert(len > 0);
+		#ifdef POSIXFIO_NOTHROW
+			return 0 == ::munlock(addr, len);
+		#else
+			if(0 != ::munlock(addr, len)) [[unlikely]] throw Errcode(errno);
+			return true;
+		#endif
+	}
+
+
+	bool MemMapping::msync(MemSyncFlags flags) {
+		assert(addr != nullptr);
+		assert(len > 0);
+		#ifdef POSIXFIO_NOTHROW
+			return 0 == ::msync(addr, len, int(flags));
+		#else
+			if(0 != ::msync(addr, len, int(flags))) [[unlikely]] throw Errcode(errno);
+			return true;
+		#endif
+	}
 
 
 	File File::open(const char* pathname, int flags, posixfio::mode_t mode) {
@@ -36,6 +121,44 @@ namespace posixfio {
 		if(! r) POSIXFIO_THROWERRNO(NULL_FD, (void) 0);
 		return r;
 	}
+
+
+	File File::open(std::string_view pathname, int flags, posixfio::mode_t mode) {
+		auto len = pathname.size();
+		auto bf = new char[len + 1];
+		File r;
+		memcpy(bf, pathname.data(), len);
+		bf[len] = '\0';
+		try        { r = File::open(bf, flags, mode); }
+		catch(...) { delete[] bf; std::rethrow_exception(std::current_exception()); }
+		delete[] bf;
+		return r;
+	}
+
+	File File::creat(std::string_view pathname, posixfio::mode_t mode) {
+		auto len = pathname.size();
+		auto bf = new char[len + 1];
+		File r;
+		memcpy(bf, pathname.data(), len);
+		bf[len] = '\0';
+		try        { r = File::creat(bf, mode); }
+		catch(...) { delete[] bf; std::rethrow_exception(std::current_exception()); }
+		delete[] bf;
+		return r;
+	}
+
+	File File::openat(fd_t dirfd, std::string_view pathname, int flags, posixfio::mode_t mode) {
+		auto len = pathname.size();
+		auto bf = new char[len + 1];
+		File r;
+		memcpy(bf, pathname.data(), len);
+		bf[len] = '\0';
+		try        { r = File::openat(dirfd, bf, flags, mode); }
+		catch(...) { delete[] bf; std::rethrow_exception(std::current_exception()); }
+		delete[] bf;
+		return r;
+	}
+
 
 
 	File::File(): fd_(NULL_FD) { }
@@ -167,6 +290,17 @@ namespace posixfio {
 			POSIXFIO_THROWERRNO(fd_, (void) 0);
 		}
 		return res;
+	}
+
+
+	MemMapping File::mmap(void* addr, size_t len, MemProtFlags prot, MemMapFlags flags, off_t off) {
+		if(len < 1) return MemMapping();
+		MemMapping r;
+		auto r_addr = ::mmap(addr, len, int(prot), int(flags), fd_, off);
+		if(r_addr == MAP_FAILED) [[unlikely]] POSIXFIO_THROWERRNO(fd_, return MemMapping());
+		r.addr = r_addr;
+		r.len = len;
+		return r;
 	}
 
 

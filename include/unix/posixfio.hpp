@@ -2,11 +2,16 @@
 
 extern "C" {
 	#include <fcntl.h>
+	#include <sys/mman.h>
 }
 
 #include <cstdint>
 #include <new>
 #include <type_traits>
+
+#ifdef POSIXFIO_STL_STRINGVIEW
+	#include <string_view>
+#endif
 
 
 
@@ -49,6 +54,66 @@ namespace posixfio {
 	};
 
 
+	enum class MemSyncFlags : int {
+		eNone = 0,
+		eAsync = MS_ASYNC,
+		eSync = MS_SYNC,
+		eInvalidate = MS_INVALIDATE
+	};
+
+
+	class MemMapping {
+	private:
+		friend File;
+		void* addr;
+		size_t len;
+
+	public:
+		MemMapping() noexcept: addr(nullptr), len(0) { }
+		MemMapping(const MemMapping&) = delete;
+		MemMapping(MemMapping&&) noexcept;
+		~MemMapping();
+		MemMapping& operator=(const MemMapping&) = delete;
+		MemMapping& operator=(MemMapping&&) noexcept;
+
+		/** Clears the pointer to the allocation, but does not unmap. */
+		void disown() { addr = nullptr; len = 0; }
+
+		/** Almost POSIX-compliant: returns `false` exclusively when an error occurs. */
+		bool munmap();
+
+		/** Almost POSIX-compliant: returns `false` exclusively when an error occurs. */
+		bool mlock();
+
+		/** Almost POSIX-compliant: returns `false` exclusively when an error occurs. */
+		bool munlock();
+
+		/** Almost POSIX-compliant: returns `false` exclusively when an error occurs. */
+		bool msync(MemSyncFlags flags = MemSyncFlags::eSync);
+
+		template<typename T = void> inline T* get() noexcept { return reinterpret_cast<T*>(addr); }
+		template<typename T = void> inline const T* get() const noexcept { return reinterpret_cast<const T*>(addr); }
+
+		inline size_t size() const { return len; }
+		inline operator bool() const { return addr != nullptr; }
+	};
+
+
+	enum class MemProtFlags : int {
+		eNone = PROT_NONE,
+		eRead = PROT_READ,
+		eWrite = PROT_WRITE,
+		eExec = PROT_EXEC
+	};
+
+	enum class MemMapFlags : int {
+		eNone = 0,
+		eShared = MAP_SHARED,
+		ePrivate = MAP_PRIVATE,
+		eFixed = MAP_FIXED
+	};
+
+
 	class File {
 		friend FileView;
 
@@ -65,7 +130,18 @@ namespace posixfio {
 		static File creat(const char* pathname, mode_t mode);
 
 		/** POSIX-compliant. */
-		static File openat(fd_t dirfd, const char* pathname, int flags, mode_t mode = 0);
+		static File openat(fd_t dirfd, const char* pathname, int flags, mode_t mode = 00660);
+
+		#ifdef POSIXFIO_STL_STRINGVIEW
+			/** POSIX-compliant. */
+			static File open(std::string_view pathname, int flags, mode_t mode = 00660);
+
+			/** POSIX-compliant. */
+			static File creat(std::string_view pathname, mode_t mode);
+
+			/** POSIX-compliant. */
+			static File openat(fd_t dirfd, std::string_view pathname, int flags, mode_t mode = 00660);
+		#endif
 
 
 		File();
@@ -107,8 +183,15 @@ namespace posixfio {
 		/** Almost POSIX-compliant: returns `false` exclusively when an error occurs. */
 		bool fdatasync();
 
+		/** POSIX-compliant. */
+		[[nodiscard]]
+		MemMapping mmap(void* addr, size_t len, MemProtFlags prot, MemMapFlags flags, off_t off);
+
+		/** POSIX-compliant. */
+		[[nodiscard]]
+		inline MemMapping mmap(size_t len, MemProtFlags prot, MemMapFlags flags, off_t off) { return mmap(nullptr, len, prot, flags, off); }
+
 		inline operator bool() const { return fd_ >= 0; }
-		inline bool operator!() const { return ! operator bool(); }
 		inline fd_t fd() const { return fd_; }
 		inline operator fd_t() const { return fd_; }
 	};
