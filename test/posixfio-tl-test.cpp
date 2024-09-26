@@ -1,6 +1,11 @@
 #include <test_tools.hpp>
 
-#include "../include/win32/posixfio_tl.hpp"
+#define POSIXFIO_STL_STRINGVIEW
+#if defined POSIXFIO_UNIX
+	#include "../include/unix/posixfio_tl.hpp"
+#elif defined POSIXFIO_WIN32
+	#include "../include/win32/posixfio_tl.hpp"
+#endif
 
 #include <array>
 #include <iostream>
@@ -19,6 +24,11 @@ namespace {
 	constexpr auto eFailure = utest::ResultType::eFailure;
 	constexpr auto eNeutral = utest::ResultType::eNeutral;
 	constexpr auto eSuccess = utest::ResultType::eSuccess;
+
+	constexpr auto eCreat  = OpenFlags::eCreat;
+	constexpr auto eRdonly = OpenFlags::eRdonly;
+	constexpr auto eWronly = OpenFlags::eWronly;
+	constexpr auto eTrunc  = OpenFlags::eTrunc;
 
 	const std::string tmpFile = "test-tmpfile";
 
@@ -174,7 +184,7 @@ namespace {
 		static_assert((outputBufferStaticCapacity == 0) != (outputBufferDynamicCapacity == 0));
 		using Buffer = OutputBuffer<outputBufferStaticCapacity>::type;
 		try {
-			File f = alwaysThrowErr(File::open(tmpFile.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600));
+			File f = alwaysThrowErr(File::open(tmpFile.c_str(), eWronly | eCreat | eTrunc, 0600));
 			{
 				Buffer buf = OutputBuffer<outputBufferStaticCapacity>::ctor(
 					f, outputBufferDynamicCapacity );
@@ -204,7 +214,7 @@ namespace {
 		static_assert((inputBufferStaticCapacity == 0) != (inputBufferDynamicCapacity == 0));
 		using Buffer = InputBuffer<inputBufferStaticCapacity>::type;
 		try {
-			File f = alwaysThrowErr(File::open(tmpFile.c_str(), O_RDONLY));
+			File f = alwaysThrowErr(File::open(tmpFile.c_str(), eRdonly));
 			Buffer buf = InputBuffer<inputBufferStaticCapacity>::ctor(
 				f, inputBufferDynamicCapacity );
 			std::unique_ptr<char[]> cmpString = std::make_unique<char[]>(ioPayload.size());
@@ -241,7 +251,7 @@ namespace {
 		static_assert((outputBufferStaticCapacity == 0) != (outputBufferDynamicCapacity == 0));
 		using Buffer = OutputBuffer<outputBufferStaticCapacity>::type;
 		try {
-			File f = alwaysThrowErr(File::open(tmpFile.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600));
+			File f = alwaysThrowErr(File::open(tmpFile.c_str(), eWronly | eCreat | eTrunc, 0600));
 			{
 				Buffer buf = OutputBuffer<outputBufferStaticCapacity>::ctor(
 					f, outputBufferDynamicCapacity );
@@ -272,7 +282,7 @@ namespace {
 		static_assert((inputBufferStaticCapacity == 0) != (inputBufferDynamicCapacity == 0));
 		using Buffer = InputBuffer<inputBufferStaticCapacity>::type;
 		try {
-			File f = alwaysThrowErr(File::open(tmpFile.c_str(), O_RDONLY));
+			File f = alwaysThrowErr(File::open(tmpFile.c_str(), eRdonly));
 			Buffer buf = InputBuffer<inputBufferStaticCapacity>::ctor(
 				f, inputBufferDynamicCapacity );
 			std::unique_ptr<char[]> cmpString = std::make_unique<char[]>(ioPayload.size());
@@ -310,7 +320,7 @@ namespace {
 		static_assert((inputBufferStaticCapacity == 0) != (inputBufferDynamicCapacity == 0));
 		using Buffer = InputBuffer<inputBufferStaticCapacity>::type;
 		try {
-			File f = alwaysThrowErr(File::open(tmpFile.c_str(), O_RDONLY));
+			File f = alwaysThrowErr(File::open(tmpFile.c_str(), eRdonly));
 			Buffer buf = InputBuffer<inputBufferStaticCapacity>::ctor(
 				f, inputBufferDynamicCapacity );
 			std::string cmpString;  cmpString.reserve(ioPayload.size());
@@ -338,7 +348,7 @@ namespace {
 
 	utest::ResultType fileerror_file_ebadf(std::ostream& out) {
 		int r = requireFileError(out, EBADF, [](std::ostream& out) {
-			auto f = File::open(tmpFile.c_str(), O_RDONLY | O_CREAT);
+			auto f = File::open(tmpFile.c_str(), eRdonly | eCreat);
 			ssize_t wr = f.write(tmpFile.c_str(), 1); // Can't write to a RDONLY file
 			switch(wr) {
 				case 0:  out << "CRITICAL: write(..., 1) returned 0" << std::endl;  return -1;
@@ -362,7 +372,7 @@ namespace {
 
 	utest::ResultType fileerror_buffer_ebadf(std::ostream& out) {
 		int r = requireFileError(out, EBADF, [](std::ostream& out) {
-			auto f = File::open(tmpFile.c_str(), O_WRONLY | O_CREAT | O_TRUNC);
+			auto f = File::open(tmpFile.c_str(), eWronly | eCreat | eTrunc);
 			auto fb = posixfio::InputBuffer(f, 1);
 			ssize_t rd = fb.fwd(); // Can't read from a WRONLY file
 			switch(rd) {
@@ -387,7 +397,7 @@ namespace {
 
 	utest::ResultType errno_buffer_ebadf(std::ostream& out) {
 		int r = requireErrno(out, EBADF, [](std::ostream& out) {
-			auto f = File::open(tmpFile.c_str(), O_WRONLY | O_CREAT | O_TRUNC);
+			auto f = File::open(tmpFile.c_str(), eWronly | eCreat | eTrunc);
 			auto fb = posixfio::InputBuffer(f, 1);
 			ssize_t rd = fb.fwd(); // Can't read from a WRONLY file
 			switch(rd) {

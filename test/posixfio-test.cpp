@@ -70,6 +70,14 @@ namespace {
 	}
 
 
+	constexpr auto eCreat  = OpenFlags::eCreat;
+	constexpr auto eRdonly = OpenFlags::eRdonly;
+	constexpr auto eWronly = OpenFlags::eWronly;
+	constexpr auto eTrunc  = OpenFlags::eTrunc;
+	constexpr auto eRdwr   = OpenFlags::eRdwr;
+	constexpr auto eSeekSet = Whence::eSet;
+
+
 	utest::ResultType requireErrno(std::ostream& out, int expect, int (*fn)(std::ostream& out)) {
 		int got;
 		try {
@@ -116,7 +124,7 @@ namespace {
 	utest::ResultType create_file(std::ostream& out) {
 		File f;
 		try {
-			f = File::open(tmpFile.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
+			f = File::open(tmpFile.c_str(), eWronly | eCreat | eTrunc, 0600);
 		} catch(...) { }
 		if(! f) {
 			out << "ERRNO " << errno << ' ' << errno_str(errno) << '\n';
@@ -129,7 +137,7 @@ namespace {
 	utest::ResultType open_file_strv(std::ostream& out) {
 		File f;
 		try {
-			f = File::open(std::string_view(tmpFile), O_WRONLY, 0600);
+			f = File::open(std::string_view(tmpFile), eWronly, 0600);
 		} catch(...) { }
 		if(! f) {
 			out << "ERRNO " << errno << ' ' << errno_str(errno) << '\n';
@@ -142,7 +150,7 @@ namespace {
 	utest::ResultType write_file(std::ostream& out) {
 		File f;
 		try {
-			f = File::open(tmpFile.c_str(), O_WRONLY);
+			f = File::open(tmpFile.c_str(), eWronly);
 			ssize_t wr = f.write(ioPayload.data(), ioPayload.size());
 			if(wr < 0) throw 0;
 			if(wr != (ssize_t) ioPayload.size()) {
@@ -164,7 +172,7 @@ namespace {
 		File f;
 		FileView fv;
 		try {
-			f = File::open(tmpFile.c_str(), O_WRONLY);
+			f = File::open(tmpFile.c_str(), eWronly);
 			fv = f.fd();
 			ssize_t wr = fv.write(ioPayload.data(), ioPayload.size());
 			if(wr < 0) throw 0;
@@ -190,7 +198,7 @@ namespace {
 	utest::ResultType read_file(std::ostream& out) {
 		File f;
 		try {
-			f = File::open(tmpFile.c_str(), O_RDONLY);
+			f = File::open(tmpFile.c_str(), eRdonly);
 			IO_PAYLOAD_BUFFER_(buf)
 			ssize_t rd = f.read(buf.data(), buf.size()-1);
 			if(rd < 0) throw 0;
@@ -217,7 +225,7 @@ namespace {
 		File f;
 		FileView fv;
 		try {
-			f = File::open(tmpFile.c_str(), O_RDONLY);
+			f = File::open(tmpFile.c_str(), eRdonly);
 			fv = f.fd();
 			IO_PAYLOAD_BUFFER_(buf)
 			ssize_t rd = fv.read(buf.data(), buf.size()-1);
@@ -248,7 +256,7 @@ namespace {
 	utest::ResultType close_file(std::ostream& out) {
 		bool cl = false;
 		try {
-			File f = File::open(tmpFile.c_str(), O_WRONLY);
+			File f = File::open(tmpFile.c_str(), eWronly);
 			cl = f.close();
 			if(! cl) throw 0;
 			if(f || (!(!f))) {
@@ -265,7 +273,7 @@ namespace {
 	utest::ResultType copy_file(std::ostream& out) {
 		File f0, f1;
 		try {
-			f0 = File::open(tmpFile.c_str(), O_RDWR);
+			f0 = File::open(tmpFile.c_str(), eRdwr);
 			f1 = f0;
 			IO_PAYLOAD_BUFFER_(buf)
 			ssize_t beg0 = 0;
@@ -276,11 +284,11 @@ namespace {
 			errno = 0;
 			bool result = true;
 			#define TRY_(OP_) if(result) { result = (OP_); }
-				TRY_(beg0 == (retval = f0.lseek(beg0, SEEK_SET)));
+				TRY_(beg0 == (retval = f0.lseek(beg0, eSeekSet)));
 				TRY_((end0-beg0) == (retval = f0.write(ioPayload.data(), end0-beg0)));
-				TRY_(beg1 == (retval = f1.lseek(beg1, SEEK_SET)));
+				TRY_(beg1 == (retval = f1.lseek(beg1, eSeekSet)));
 				TRY_((end1-beg1) == (retval = f1.write(ioPayload.data()+beg1, end1-beg1)));
-				TRY_(0 == (retval = f0.lseek(0, SEEK_SET)));
+				TRY_(0 == (retval = f0.lseek(0, eSeekSet)));
 				TRY_((end1-beg0) == (retval = f0.read(buf.data(), end1-beg0)));
 				TRY_(0 == strncmp(buf.data(), ioPayload.data(), ioPayload.length()));
 			#undef TRY_
@@ -303,7 +311,7 @@ namespace {
 		File f0, f1;
 		FileView fw;
 		try {
-			f0 = File::open(tmpFile.c_str(), O_RDWR);
+			f0 = File::open(tmpFile.c_str(), eRdwr);
 			f1 = f0;
 			IO_PAYLOAD_BUFFER_(buf)
 			ssize_t beg0 = 0;
@@ -316,13 +324,13 @@ namespace {
 			unsigned step = 0;
 			#define TRY_(OP_) if(result) { result = (OP_); ++ step; }
 				fw = FileView(f0);
-				TRY_(beg0 == (retval = fw.lseek(beg0, SEEK_SET)));
+				TRY_(beg0 == (retval = fw.lseek(beg0, eSeekSet)));
 				TRY_((end0-beg0) == (retval = fw.write(ioPayload.data(), end0-beg0)));
 				fw = FileView(f1);
-				TRY_(beg1 == (retval = fw.lseek(beg1, SEEK_SET)));
+				TRY_(beg1 == (retval = fw.lseek(beg1, eSeekSet)));
 				TRY_((end1-beg1) == (retval = fw.write(ioPayload.data()+beg1, end1-beg1)));
 				fw = FileView(f0);
-				TRY_(0 == (retval = fw.lseek(0, SEEK_SET)));
+				TRY_(0 == (retval = fw.lseek(0, eSeekSet)));
 				TRY_((end1-beg0) == (retval = fw.read(buf.data(), end1-beg0)));
 				TRY_(0 == strncmp(buf.data(), ioPayload.data(), ioPayload.length()));
 			#undef TRY_
@@ -345,7 +353,7 @@ namespace {
 		return requireFileError(out, ENOENT, [](std::ostream&) {
 			auto f = File::open(
 				"/No file named like this should ever exist in a filesystem's root dir",
-				O_RDONLY );
+				eRdonly );
 			if(f) {
 				return 0;
 			} else {
@@ -360,7 +368,7 @@ namespace {
 		return requireErrno(out, ENOENT, [](std::ostream&) {
 			auto f = File::open(
 				"/No file named like this should ever exist in a filesystem's root dir",
-				O_RDONLY );
+				eRdonly );
 			if(f) {
 				return 0;
 			} else {

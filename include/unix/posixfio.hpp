@@ -9,6 +9,8 @@ extern "C" {
 #include <new>
 #include <type_traits>
 
+#include "posixfio/constants.hpp"
+
 #ifdef POSIXFIO_STL_STRINGVIEW
 	#include <string_view>
 #endif
@@ -54,14 +56,6 @@ namespace posixfio {
 	};
 
 
-	enum class MemSyncFlags : int {
-		eNone = 0,
-		eAsync = MS_ASYNC,
-		eSync = MS_SYNC,
-		eInvalidate = MS_INVALIDATE
-	};
-
-
 	class MemMapping {
 	private:
 		friend File;
@@ -99,21 +93,6 @@ namespace posixfio {
 	};
 
 
-	enum class MemProtFlags : int {
-		eNone = PROT_NONE,
-		eRead = PROT_READ,
-		eWrite = PROT_WRITE,
-		eExec = PROT_EXEC
-	};
-
-	enum class MemMapFlags : int {
-		eNone = 0,
-		eShared = MAP_SHARED,
-		ePrivate = MAP_PRIVATE,
-		eFixed = MAP_FIXED
-	};
-
-
 	class File {
 		friend FileView;
 
@@ -124,23 +103,23 @@ namespace posixfio {
 		static constexpr fd_t NULL_FD = -1;
 
 		/** POSIX-compliant. */
-		static File open(const char* pathname, int flags, mode_t mode = 00660);
+		static File open(const char* pathname, OpenFlags flags, mode_t mode = 00660);
 
 		/** POSIX-compliant. */
 		static File creat(const char* pathname, mode_t mode);
 
 		/** POSIX-compliant. */
-		static File openat(fd_t dirfd, const char* pathname, int flags, mode_t mode = 00660);
+		static File openat(fd_t dirfd, const char* pathname, OpenFlags flags, mode_t mode = 00660);
 
 		#ifdef POSIXFIO_STL_STRINGVIEW
 			/** POSIX-compliant. */
-			static File open(std::string_view pathname, int flags, mode_t mode = 00660);
+			static File open(std::string_view pathname, OpenFlags flags, mode_t mode = 00660);
 
 			/** POSIX-compliant. */
 			static File creat(std::string_view pathname, mode_t mode);
 
 			/** POSIX-compliant. */
-			static File openat(fd_t dirfd, std::string_view pathname, int flags, mode_t mode = 00660);
+			static File openat(fd_t dirfd, std::string_view pathname, OpenFlags flags, mode_t mode = 00660);
 		#endif
 
 
@@ -172,7 +151,7 @@ namespace posixfio {
 		ssize_t write(const void* buf, size_t count);
 
 		/** POSIX-compliant. */
-		off_t lseek(off_t offset, int whence);
+		off_t lseek(off_t offset, Whence whence);
 
 		/** Almost POSIX-compliant: returns `false` exclusively when an error occurs. */
 		bool ftruncate(off_t length);
