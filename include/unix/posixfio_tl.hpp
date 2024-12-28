@@ -10,16 +10,16 @@
 
 namespace posixfio {
 
-	namespace _buffer_op_impl {
+	namespace _buffer_op_impl { inline namespace v0_6_1 {
 
 		/* This namespace is only to be used internally by this library,
 		 * and its signatures may change at any time in any way.
 		 * */
 
-		ssize_t bfRead(FileView, void* buf, size_t* bufBegPtr, size_t* bufEndPtr, void* dst, size_t count);
+		ssize_t bfRead(FileView, void* buf, size_t* bufBegPtr, size_t* bufEndPtr, size_t bufCapacity, void* dst, size_t count);
 		ssize_t bfWrite(FileView, void* buf, size_t* bufBegPtr, size_t* bufEndPtr, size_t bufCapacity, const void* src, size_t count);
 
-	};
+	}};
 
 
 
@@ -91,6 +91,9 @@ namespace posixfio {
 
 		/** Returns the number of ready-to-read bytes. */
 		inline size_t size() const { return end_ - begin_; }
+
+		/** Returns the maximum number of ready-to-read bytes. */
+		inline size_t capacity() const { return capacity_; }
 
 		/** Discard the entire buffer; the next read will try to fill the buffer. */
 		inline void discard() { begin_ = 0;  end_ = 0; }
@@ -168,14 +171,14 @@ namespace posixfio {
 
 		/** Similar to File::read, but may fail after a partial read. */
 		ssize_t read(void* buf, size_t count) {
-			return _buffer_op_impl::bfRead(file_, buffer_, &bufferBegin_, &bufferEnd_, buf, count);
+			return _buffer_op_impl::bfRead(file_, buffer_, &bufferBegin_, &bufferEnd_, capacity, buf, count);
 		}
 
 		/** Similar to readLeast, but may fail after a partial read. */
 		ssize_t readLeast(void* buf, size_t least, size_t count) {
 			ssize_t total = 0;
 			while(total < ssize_t(least)) {
-				auto rd = _buffer_op_impl::bfRead(file_, buffer_, &bufferBegin_, &bufferEnd_, buf, ssize_t(count) - total);
+				auto rd = _buffer_op_impl::bfRead(file_, buffer_, &bufferBegin_, &bufferEnd_, capacity, reinterpret_cast<byte_t*>(buf) + total, ssize_t(count) - total);
 				if(rd == 0) [[unlikely]] return total;
 				if(rd < 0) [[unlikely]] return -1;
 				total += rd;

@@ -20,11 +20,11 @@
 
 namespace posixfio {
 
-	namespace _buffer_op_impl {
+	namespace _buffer_op_impl::v0_6_1 {
 
 		ssize_t bfRead(
 				FileView file,
-				void* buf, size_t* bufBeginPtr, size_t* bufEndPtr,
+				void* buf, size_t* bufBeginPtr, size_t* bufEndPtr, size_t bufCapacity,
 				void* dst, size_t count
 		) {
 			//         | ..... | DataDataDataDataData | .......................... |
@@ -32,35 +32,55 @@ namespace posixfio {
 			// All bytes before `begin` have already been read
 			// All bytes between `begin` and `end` are queued to be read
 			#define BYTES_(PTR_) reinterpret_cast<byte_t*>(PTR_)
+			#ifdef POSIXFIO_NOTHROW
+				#define CHECK_ERR_ { if(rd < 0) [[unlikely]] { return rd; } }
+			#else
+				#define CHECK_ERR_ { assert(rd >= 0); }
+			#endif
 			assert(buf);
 			assert(bufEndPtr);
 			assert(bufBeginPtr);
 			auto initBufEnd = *bufEndPtr;
 			auto initBufBegin = *bufBeginPtr;
-			auto initWindowSize = initBufEnd - initBufBegin;  assert(initBufEnd >= initBufBegin);
-			if(count < initWindowSize) {
+			auto windowSize = initBufEnd - initBufBegin;  assert(initBufEnd >= initBufBegin);
+			if(count <= windowSize) {
 				// Enough available bytes
 				memcpy(dst, BYTES_(buf) + initBufBegin, count);
 				*bufBeginPtr += count;
 				return count;
 			} else {
-				#ifdef POSIXFIO_NOTHROW
-					#define CHECK_ERR_ { if(rd < 0) [[unlikely]] { return rd; } }
-				#else
-					#define CHECK_ERR_ { assert(rd >= 0); }
-				#endif
-				size_t directRdCount = count - initWindowSize;
-				memcpy(dst, BYTES_(buf) + initBufBegin, initWindowSize);
-				#ifdef POSIXFIO_DBG_LIMIT_DIRECT_RD
-					directRdCount = std::min(directRdCount, decltype(directRdCount)(POSIXFIO_DBG_LIMIT_DIRECT_RD));
-				#endif
-				ssize_t rd = file.read(BYTES_(dst) + initWindowSize, directRdCount);
-				CHECK_ERR_
-				*bufBeginPtr = 0;
-				*bufEndPtr = 0;
-				#undef CHECK_ERR_
-				return rd + initWindowSize;
+				if(count <= bufCapacity) {
+					if(windowSize > 0) {
+						// Report a partial read, let the user decide whether to read further
+						memcpy(dst, BYTES_(buf) + initBufBegin, windowSize);
+						*bufBeginPtr = initBufEnd;
+						return windowSize;
+					} else {
+						// Populate the buffer
+						ssize_t rd = file.read(BYTES_(buf), bufCapacity);
+						CHECK_ERR_
+						size_t retn = std::min<size_t>(count, rd);
+						*bufBeginPtr = retn;
+						*bufEndPtr = rd;
+						memcpy(BYTES_(dst), BYTES_(buf), retn);
+						return retn;
+					}
+				} else {
+					// Read-through
+					size_t directRdCount = count - windowSize;
+					memcpy(dst, BYTES_(buf) + initBufBegin, windowSize);
+					*bufBeginPtr = *bufEndPtr;
+					#ifdef POSIXFIO_DBG_LIMIT_DIRECT_RD
+						directRdCount = std::min<size_t>(directRdCount, POSIXFIO_DBG_LIMIT_DIRECT_RD);
+					#endif
+					ssize_t rd = file.read(BYTES_(dst) + windowSize, directRdCount);
+					CHECK_ERR_
+					*bufBeginPtr = 0;
+					*bufEndPtr = 0;
+					return windowSize + rd;
+				}
 			}
+			#undef CHECK_ERR_
 			#undef BYTES_
 		}
 
@@ -279,7 +299,7 @@ namespace posixfio {
 			file_(file),
 			begin_(0),
 			end_(0),
-			capacity_(cap > 1? size_t(1) : cap),
+			capacity_(cap > 1? cap : size_t(1)),
 			buffer_((byte_t*) operator new[](capacity_ * sizeof(capacity_)))
 	{
 		assert(cap > 0);
@@ -304,14 +324,14 @@ namespace posixfio {
 
 
 	ssize_t InputBuffer::read(void* userBuf, size_t count) {
-		return _buffer_op_impl::bfRead(file_, buffer_, &begin_, &end_, userBuf, count);
+		return _buffer_op_impl::bfRead(file_, buffer_, &begin_, &end_, capacity_, userBuf, count);
 	}
 
 
 	ssize_t InputBuffer::readLeast(void* buf, size_t least, size_t count) {
 		ssize_t total = 0;
 		while(size_t(total) < least) {
-			auto rd = _buffer_op_impl::bfRead(file_, buffer_, &begin_, &end_, buf, ssize_t(count) - total);
+			auto rd = _buffer_op_impl::bfRead(file_, buffer_, &begin_, &end_, capacity_, reinterpret_cast<byte_t*>(buf) + total, ssize_t(count) - total);
 			if(rd == 0) [[unlikely]] return total;
 			if(rd < 0) [[unlikely]] return -1;
 			total += rd;
@@ -376,7 +396,7 @@ namespace posixfio {
 			file_(file),
 			begin_(0),
 			end_(0),
-			capacity_(cap > 1? size_t(1) : cap),
+			capacity_(cap > 1? cap : size_t(1)),
 			buffer_((byte_t*) operator new[](capacity_ * sizeof(capacity_)))
 	{
 		assert(cap > 0);

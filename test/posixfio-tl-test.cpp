@@ -28,6 +28,7 @@ namespace {
 	constexpr auto eCreat  = OpenFlags::eCreat;
 	constexpr auto eRdonly = OpenFlags::eRdonly;
 	constexpr auto eWronly = OpenFlags::eWronly;
+	constexpr auto eRdwr   = OpenFlags::eRdwr;
 	constexpr auto eTrunc  = OpenFlags::eTrunc;
 
 	const std::string tmpFile = "test-tmpfile";
@@ -133,7 +134,7 @@ namespace {
 
 
 	std::string mkPayload(size_t payloadSize) {
-		static const std::string_view charset = "abcdefghi1234567890\n ";
+		static const std::string_view charset = "abcdefghi1234567890";
 		static decltype(payloadSize) state = 2;
 		std::string r;  r.reserve(payloadSize);
 		auto rng = std::minstd_rand(state += payloadSize);
@@ -346,6 +347,67 @@ namespace {
 	}
 
 
+	template<bool useArrayBuffer>
+	utest::ResultType rw_buffer_specific_chunks(std::ostream& out) {
+		constexpr size_t cap = 20;
+		constexpr size_t capStatic  = useArrayBuffer? cap : 0;
+		auto payload = mkPayload(100);
+		using InBuffer  = InputBuffer <capStatic>::type;
+		using OutBuffer = OutputBuffer<capStatic>::type;
+		try {
+			bool fail = false;
+			size_t offset = 0;
+			File f = alwaysThrowErr(File::open(tmpFile.c_str(), eRdwr));
+			OutBuffer obuf = OutputBuffer<capStatic>::ctor(f, cap);
+			#define EXPECT_WR_(COUNT_, EXP_IMMEDIATE_) { \
+				ssize_t wr; wr = alwaysThrowErr(obuf.write(payload.data() + offset, COUNT_)); \
+				if(wr != EXP_IMMEDIATE_) { out << "Immediate write mismatch at offset " << offset << ": got " << wr << ", expected " << EXP_IMMEDIATE_ << std::endl; fail = true; } \
+				offset += wr; \
+			}
+			EXPECT_WR_(30, 30)
+			EXPECT_WR_(10, 10)
+			EXPECT_WR_(60, 60)
+			#undef EXPECT_WR_
+
+			obuf.flush();
+			f.lseek(0, Whence::eSet);
+			offset = 0;
+
+			InBuffer ibuf = InputBuffer<capStatic>::ctor(f, cap);
+			#define EXPECT_RD_(COUNT_, EXP_IMMEDIATE_, EXP_BUFFERED_) { \
+				ssize_t rd; rd = alwaysThrowErr(ibuf.read(cmpString.data() + offset, COUNT_)); \
+				if     (rd          != EXP_IMMEDIATE_) { out << "Immediate read mismatch at offset " << offset << ": got " << rd << ", expected " << EXP_IMMEDIATE_ << std::endl; fail = true; } \
+				else if(ibuf.size() != EXP_BUFFERED_ ) { out << "Buffered read mismatch at offset " << offset << ": got " << ibuf.size() << ", expected " << EXP_BUFFERED_ << std::endl; fail = true; } \
+				offset += rd; \
+			}
+			std::string cmpString;  cmpString.resize(payload.size() * 2);
+			EXPECT_RD_(10, 10, 10) // offset 10
+			EXPECT_RD_(20, 10,  0) // offset 20 (30-10)
+			EXPECT_RD_(30, 30,  0) // offset 50
+			EXPECT_RD_(15, 15,  5) // offset 65
+			EXPECT_RD_(10,  5,  0) // offset 70 (75-5)
+			EXPECT_RD_(30, 30,  0)
+			#undef EXPECT_RD_
+			if(offset != payload.size()) {
+				out << "Size mismatch: expected " << payload.size() << ", got " << offset << std::endl;
+				return eFailure;
+			}
+			auto cmpStringView = std::string_view(cmpString.begin(), cmpString.begin() + offset);
+			auto diffPt = diff(payload, cmpStringView);
+			if(0 <= diffPt) {
+				out << "File content does not match at char " << diffPt << std::endl;
+				return eFailure;
+			}
+			if(fail) {
+				out << "File content and size both match";
+				return eFailure;
+			}
+			return eSuccess;
+		} CATCH_ERRNO_(out)
+		return eFailure;
+	}
+
+
 	utest::ResultType fileerror_file_ebadf(std::ostream& out) {
 		int r = requireFileError(out, EBADF, [](std::ostream& out) {
 			auto f = File::open(tmpFile.c_str(), eRdonly | eCreat);
@@ -485,5 +547,7 @@ int main(int, char**) {
 	#ifndef POSIXFIO_NOTHROW
 		batch.run("Read write-only buffer (EBADF, legacy)", errno_buffer_ebadf);
 	#endif
+	batch.run("Optimal buffering (allocated)", rw_buffer_specific_chunks<false>);
+	batch.run("Optimal buffering (on stack)", rw_buffer_specific_chunks<true>);
 	return batch.failures() == 0? EXIT_SUCCESS : EXIT_FAILURE;
 }
