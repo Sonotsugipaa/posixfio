@@ -143,6 +143,24 @@ namespace {
 		return eSuccess;
 	};
 
+
+	utest::ResultType move_map(std::ostream& out) {
+		File f;
+		try {
+			f = File::open(tmpFile.c_str(), eRdwr | eCreat | eTrunc, 0600);
+			if(f) {
+				f.ftruncate(ioPayload.size());
+				MemMapping src = f.mmap(ioPayload.size(), MemProtFlags::eWrite, MemMapFlags::eShared, 0);
+				MemMapping dst = std::move(src);
+			}
+		} catch(...) { f = { }; }
+		if(! f) {
+			out << "ERRNO " << errno << ' ' << errno_str(errno) << '\n';
+			return eFailure;
+		}
+		return eSuccess;
+	};
+
 }
 
 
@@ -152,7 +170,8 @@ int main(int, char**) {
 	ioPayload = mkPayload();
 	batch
 		.run("Write mapped file", write_file)
-		.run("Read mapped file", read_file);
+		.run("Read mapped file", read_file)
+		.run("Move mapping", move_map);
 	ioPayload = mkPayload();
 	return batch.failures() == 0? EXIT_SUCCESS : EXIT_FAILURE;
 }
