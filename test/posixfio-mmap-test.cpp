@@ -105,7 +105,7 @@ namespace {
 				}
 				memcpy(addr, ioPayload.data(), ioPayload.size());
 			}
-		} catch(...) { f = { }; }
+		} catch(...) { f.close(); }
 		if(! f) {
 			out << "ERRNO " << errno << ' ' << errno_str(errno) << '\n';
 			return eFailure;
@@ -135,7 +135,7 @@ namespace {
 					return eFailure;
 				}
 			}
-		} catch(...) { f = { }; }
+		} catch(...) { f.close(); }
 		if(! f) {
 			out << "ERRNO " << errno << ' ' << errno_str(errno) << '\n';
 			return eFailure;
@@ -153,7 +153,7 @@ namespace {
 				MemMapping src = f.mmap(ioPayload.size(), MemProtFlags::eWrite, MemMapFlags::eShared, 0);
 				MemMapping dst = std::move(src);
 			}
-		} catch(...) { f = { }; }
+		} catch(...) { f.close(); }
 		if(! f) {
 			out << "ERRNO " << errno << ' ' << errno_str(errno) << '\n';
 			return eFailure;

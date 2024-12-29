@@ -58,7 +58,7 @@ namespace posixfio {
 
 	class MemMapping {
 	private:
-		friend File;
+		friend FileView;
 		void* addr;
 		size_t len;
 
@@ -93,8 +93,8 @@ namespace posixfio {
 	};
 
 
-	class File {
-		friend FileView;
+	class FileView {
+		friend File;
 
 	private:
 		fd_t fd_;
@@ -102,44 +102,18 @@ namespace posixfio {
 	public:
 		static constexpr fd_t NULL_FD = -1;
 
-		/** POSIX-compliant. */
-		static File open(const char* pathname, OpenFlags flags, mode_t mode = 00660);
-
-		/** POSIX-compliant. */
-		static File creat(const char* pathname, mode_t mode);
-
-		/** POSIX-compliant. */
-		static File openat(fd_t dirfd, const char* pathname, OpenFlags flags, mode_t mode = 00660);
-
-		#ifdef POSIXFIO_STL_STRINGVIEW
-			/** POSIX-compliant. */
-			static File open(std::string_view pathname, OpenFlags flags, mode_t mode = 00660);
-
-			/** POSIX-compliant. */
-			static File creat(std::string_view pathname, mode_t mode);
-
-			/** POSIX-compliant. */
-			static File openat(fd_t dirfd, std::string_view pathname, OpenFlags flags, mode_t mode = 00660);
-		#endif
-
-
-		File();
-		File(fd_t);
-		File(const File&);
-		File(File&&);
-		~File();
-
-		/** Almost POSIX-compliant: returns `false` exclusively when an error occurs. */
-		bool close();
-
-		File& operator=(const File&);
-		File& operator=(File&&);
+		FileView() noexcept: fd_(NULL_FD) { }
+		FileView(fd_t fd) noexcept: fd_(fd) { }
+		FileView(const FileView&) noexcept = default;
+		FileView(FileView&&) noexcept = default;
+		FileView& operator=(const FileView&) = default;
+		FileView& operator=(FileView&&) = default;
 
 		/** Sets the internal file descriptor to `NULL_FD`, then returns its old value. */
-		inline fd_t disown() { fd_t r = fd_;  fd_ = NULL_FD;  return r; }
+		inline fd_t disown() noexcept { fd_t r = fd_;  fd_ = NULL_FD;  return r; }
 
 		/** POSIX-compliant. */
-		inline File dup() const { return File(*this); }
+		inline File dup() const;
 
 		/** POSIX-compliant. */
 		File dup2(fd_t fildes2) const;
@@ -170,10 +144,48 @@ namespace posixfio {
 		[[nodiscard]]
 		inline MemMapping mmap(size_t len, MemProtFlags prot, MemMapFlags flags, off_t off) { return mmap(nullptr, len, prot, flags, off); }
 
-		inline operator bool() const { return fd_ >= 0; }
-		inline fd_t fd() const { return fd_; }
-		inline operator fd_t() const { return fd_; }
+		inline operator bool() const noexcept { return fd_ >= 0; }
+		inline fd_t fd() const noexcept { return fd_; }
+		inline operator fd_t() const noexcept { return fd_; }
 	};
+
+
+	class File : public FileView {
+	public:
+		/** POSIX-compliant. */
+		static File open(const char* pathname, OpenFlags flags, mode_t mode = 00660);
+
+		/** POSIX-compliant. */
+		static File creat(const char* pathname, mode_t mode);
+
+		/** POSIX-compliant. */
+		static File openat(fd_t dirfd, const char* pathname, OpenFlags flags, mode_t mode = 00660);
+
+		#ifdef POSIXFIO_STL_STRINGVIEW
+			/** POSIX-compliant. */
+			static File open(std::string_view pathname, OpenFlags flags, mode_t mode = 00660);
+
+			/** POSIX-compliant. */
+			static File creat(std::string_view pathname, mode_t mode);
+
+			/** POSIX-compliant. */
+			static File openat(fd_t dirfd, std::string_view pathname, OpenFlags flags, mode_t mode = 00660);
+		#endif
+
+		inline File(): FileView(NULL_FD) { }
+		inline File(File&& mv): FileView(mv.fd_) { mv.disown(); }
+		inline File(const File& cp): File(FileView(cp.fd_)) { }
+		inline File& operator=(const File& cp) { return operator=(FileView(cp.fd_)); }
+
+		explicit File(const FileView&);
+		~File();
+		File& operator=(const FileView&);
+		File& operator=(File&&);
+
+		/** Almost POSIX-compliant: returns `false` exclusively when an error occurs. */
+		bool close();
+	};
+	inline File FileView::dup() const { return File(*this); }
 
 
 	struct Pipe {
@@ -195,22 +207,6 @@ namespace posixfio {
 
 		inline operator bool() const { return rd && wr; }
 		inline bool operator!() const { return ! operator bool(); }
-	};
-
-
-	class FileView : public File {
-	public:
-		using File::File;
-		inline FileView(fd_t fd): File(fd) { }
-		inline FileView(const File& f): File(f.fd_) { }
-		inline FileView(const FileView& cp): File(cp.fd_) { }
-		inline ~FileView() { disown(); }
-
-		inline FileView& operator=(fd_t fd) { fd_ = fd;  return *this; }
-		inline FileView& operator=(const File& f) { fd_ = f.fd_;  return *this; }
-		inline FileView& operator=(const FileView& fv) { fd_ = fv.fd_;  return *this; }
-
-		inline bool close() { disown(); return true; }
 	};
 
 

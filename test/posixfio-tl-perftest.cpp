@@ -113,7 +113,7 @@ namespace {
 	struct Env {
 		static constexpr byte_t initialSeed = fastHash<byte_t>('s', 'e', 'e', 'd');
 		static constexpr size_t fileSize = 128*1024*1024;
-		File file = { };
+		File file;
 		bool initialized = false;
 
 		void init() {
@@ -126,7 +126,7 @@ namespace {
 				file = File::open("perf-tmpfile.txt", OpenFlags::eRdwr | OpenFlags::eCreat | OpenFlags::eTrunc);
 			} catch(Errcode& err) {
 				initialized = false;
-				file = { };
+				file.close();
 				std::stringstream msg;
 				msg << "Failed to open temporary file: errno ";
 				msg << err.errcode;
@@ -163,7 +163,7 @@ namespace {
 
 		~Env() {
 			if(initialized) file.ftruncate(0);
-			file = { };
+			file.close();
 			initialized = false;
 		}
 	};
@@ -173,7 +173,7 @@ namespace {
 	auto rwPerftest(size_t segmSize, size_t bufferSize) {
 		std::pair<uintmax_t, uintmax_t> r;
 		auto segm = std::make_unique_for_overwrite<byte_t[]>(segmSize);
-		auto obuf = ArrayOutputBuffer<>(env.file);
+		auto obuf = OutputBuffer(env.file, bufferSize);
 		byte_t hash = Env::initialSeed;
 		SteadyTimer timer;
 		for(size_t i = 0; i < Env::fileSize; i += segmSize) {

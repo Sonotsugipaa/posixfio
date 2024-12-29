@@ -104,20 +104,95 @@ namespace posixfio {
 	}
 
 
+	posixfio::ssize_t FileView::read(void* buf, size_t count) {
+		posixfio::ssize_t rd = ::read(fd_, buf, count);
+		if(rd < 0) {
+			POSIXFIO_THROWERRNO(fd_, return rd);
+		}
+		return rd;
+	}
+
+	posixfio::ssize_t FileView::write(const void* buf, size_t count) {
+		posixfio::ssize_t wr = ::write(fd_, buf, count);
+		if(wr < 0) {
+			POSIXFIO_THROWERRNO(fd_, return wr);
+		}
+		return wr;
+	}
+
+
+	off_t FileView::lseek(off_t offset, Whence whence) {
+		posixfio::ssize_t seek = ::lseek(fd_, offset, int(whence));
+		if(seek < 0) {
+			POSIXFIO_THROWERRNO(fd_, (void) 0);
+		}
+		return seek;
+	}
+
+
+	bool FileView::ftruncate(off_t length) {
+		int trunc = ::ftruncate(fd_, length);
+		assert(trunc == 0 || trunc == -1);
+		if(trunc < 0) {
+			POSIXFIO_THROWERRNO(fd_, (void) 0);
+		}
+		return trunc;
+	}
+
+
+	bool FileView::fsync() {
+		int res = ::fsync(fd_);
+		assert(res == 0 || res == -1);
+		if(res < 0) {
+			POSIXFIO_THROWERRNO(fd_, (void) 0);
+		}
+		return res;
+	}
+
+
+	bool FileView::fdatasync() {
+		int res = ::fdatasync(fd_);
+		assert(res == 0 || res == -1);
+		if(res < 0) {
+			POSIXFIO_THROWERRNO(fd_, (void) 0);
+		}
+		return res;
+	}
+
+
+	MemMapping FileView::mmap(void* addr, size_t len, MemProtFlags prot, MemMapFlags flags, off_t off) {
+		if(len < 1) return MemMapping();
+		MemMapping r;
+		auto r_addr = ::mmap(addr, len, int(prot), int(flags), fd_, off);
+		if(r_addr == MAP_FAILED) [[unlikely]] POSIXFIO_THROWERRNO(fd_, return MemMapping());
+		r.addr = r_addr;
+		r.len = len;
+		return r;
+	}
+
+
+	File FileView::dup2(fd_t newFd) const {
+		fd_t r = ::dup2(fd_, newFd);
+		if(r < 0) POSIXFIO_THROWERRNO(fd_, return File());
+		return File(r);
+	}
+
+
+
 	File File::open(const char* pathname, OpenFlags flags, posixfio::mode_t mode) {
-		File r = ::open(pathname, int(flags), mode);
+		File r; r.fd_ = ::open(pathname, int(flags), mode);
 		if(! r) POSIXFIO_THROWERRNO(NULL_FD, (void) 0);
 		return r;
 	}
 
 	File File::creat(const char* pathname, posixfio::mode_t mode) {
-		File r = ::creat(pathname, mode);
+		File r; r.fd_ = ::creat(pathname, mode);
 		if(! r) POSIXFIO_THROWERRNO(NULL_FD, (void) 0);
 		return r;
 	}
 
 	File File::openat(fd_t dirfd, const char* pathname, OpenFlags flags, posixfio::mode_t mode) {
-		File r = ::openat(dirfd, pathname, int(flags), mode);
+		File r; r.fd_ = ::openat(dirfd, pathname, int(flags), mode);
 		if(! r) POSIXFIO_THROWERRNO(NULL_FD, (void) 0);
 		return r;
 	}
@@ -160,25 +235,12 @@ namespace posixfio {
 	}
 
 
-
-	File::File(): fd_(NULL_FD) { }
-
-	File::File(fd_t fd): fd_(fd) { }
-
-
-	File::File(const File& cp):
-			fd_(::dup(cp.fd_))
+	File::File(const FileView& cp):
+			FileView(::dup(cp.fd_))
 	{
 		#ifndef POSIXFIO_NOTHROW
 			if(fd_ < 0) POSIXFIO_THROWERRNO(fd_, (void) 0);
 		#endif
-	}
-
-
-	File::File(File&& mv):
-			fd_(std::move(mv.fd_))
-	{
-		mv.fd_ = NULL_FD;
 	}
 
 
@@ -224,84 +286,10 @@ namespace posixfio {
 		}
 	#endif
 
-		File& File::operator=(const File& cp) MK_OPERATOR_EQ(cp)
+		File& File::operator=(const FileView& cp) MK_OPERATOR_EQ(cp)
 		File& File::operator=(File&& mv) MK_OPERATOR_EQ(std::move(mv))
 
 	#undef MK_OPERATOR_EQ
-
-
-	File File::dup2(fd_t newFd) const {
-		fd_t r = ::dup2(fd_, newFd);
-		if(r < 0) POSIXFIO_THROWERRNO(fd_, return File());
-		return File(r);
-	}
-
-
-	posixfio::ssize_t File::read(void* buf, size_t count) {
-		posixfio::ssize_t rd = ::read(fd_, buf, count);
-		if(rd < 0) {
-			POSIXFIO_THROWERRNO(fd_, return rd);
-		}
-		return rd;
-	}
-
-	posixfio::ssize_t File::write(const void* buf, size_t count) {
-		posixfio::ssize_t wr = ::write(fd_, buf, count);
-		if(wr < 0) {
-			POSIXFIO_THROWERRNO(fd_, return wr);
-		}
-		return wr;
-	}
-
-
-	off_t File::lseek(off_t offset, Whence whence) {
-		posixfio::ssize_t seek = ::lseek(fd_, offset, int(whence));
-		if(seek < 0) {
-			POSIXFIO_THROWERRNO(fd_, (void) 0);
-		}
-		return seek;
-	}
-
-
-	bool File::ftruncate(off_t length) {
-		int trunc = ::ftruncate(fd_, length);
-		assert(trunc == 0 || trunc == -1);
-		if(trunc < 0) {
-			POSIXFIO_THROWERRNO(fd_, (void) 0);
-		}
-		return trunc;
-	}
-
-
-	bool File::fsync() {
-		int res = ::fsync(fd_);
-		assert(res == 0 || res == -1);
-		if(res < 0) {
-			POSIXFIO_THROWERRNO(fd_, (void) 0);
-		}
-		return res;
-	}
-
-
-	bool File::fdatasync() {
-		int res = ::fdatasync(fd_);
-		assert(res == 0 || res == -1);
-		if(res < 0) {
-			POSIXFIO_THROWERRNO(fd_, (void) 0);
-		}
-		return res;
-	}
-
-
-	MemMapping File::mmap(void* addr, size_t len, MemProtFlags prot, MemMapFlags flags, off_t off) {
-		if(len < 1) return MemMapping();
-		MemMapping r;
-		auto r_addr = ::mmap(addr, len, int(prot), int(flags), fd_, off);
-		if(r_addr == MAP_FAILED) [[unlikely]] POSIXFIO_THROWERRNO(fd_, return MemMapping());
-		r.addr = r_addr;
-		r.len = len;
-		return r;
-	}
 
 
 	Pipe Pipe::create() {

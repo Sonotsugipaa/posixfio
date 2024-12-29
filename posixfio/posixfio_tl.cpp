@@ -308,7 +308,6 @@ namespace posixfio {
 	InputBuffer::~InputBuffer() {
 		if(file_) {
 			delete[] buffer_;
-			file_.close();
 			#ifndef NDEBUG
 				buffer_ = nullptr;
 			#endif
