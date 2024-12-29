@@ -104,8 +104,8 @@ namespace posixfio {
 	}
 
 
-	File File::open(const char* pathname, int flags, posixfio::mode_t mode) {
-		File r = ::open(pathname, flags, mode);
+	File File::open(const char* pathname, OpenFlags flags, posixfio::mode_t mode) {
+		File r = ::open(pathname, int(flags), mode);
 		if(! r) POSIXFIO_THROWERRNO(NULL_FD, (void) 0);
 		return r;
 	}
@@ -116,14 +116,14 @@ namespace posixfio {
 		return r;
 	}
 
-	File File::openat(fd_t dirfd, const char* pathname, int flags, posixfio::mode_t mode) {
-		File r = ::openat(dirfd, pathname, flags, mode);
+	File File::openat(fd_t dirfd, const char* pathname, OpenFlags flags, posixfio::mode_t mode) {
+		File r = ::openat(dirfd, pathname, int(flags), mode);
 		if(! r) POSIXFIO_THROWERRNO(NULL_FD, (void) 0);
 		return r;
 	}
 
 
-	File File::open(std::string_view pathname, int flags, posixfio::mode_t mode) {
+	File File::open(std::string_view pathname, OpenFlags flags, posixfio::mode_t mode) {
 		auto len = pathname.size();
 		auto bf = new char[len + 1];
 		File r;
@@ -147,7 +147,7 @@ namespace posixfio {
 		return r;
 	}
 
-	File File::openat(fd_t dirfd, std::string_view pathname, int flags, posixfio::mode_t mode) {
+	File File::openat(fd_t dirfd, std::string_view pathname, OpenFlags flags, posixfio::mode_t mode) {
 		auto len = pathname.size();
 		auto bf = new char[len + 1];
 		File r;
@@ -254,8 +254,8 @@ namespace posixfio {
 	}
 
 
-	off_t File::lseek(off_t offset, int whence) {
-		posixfio::ssize_t seek = ::lseek(fd_, offset, whence);
+	off_t File::lseek(off_t offset, Whence whence) {
+		posixfio::ssize_t seek = ::lseek(fd_, offset, int(whence));
 		if(seek < 0) {
 			POSIXFIO_THROWERRNO(fd_, (void) 0);
 		}

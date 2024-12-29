@@ -20,11 +20,11 @@
 
 namespace posixfio {
 
-	namespace _buffer_op_impl {
+	namespace _buffer_op_impl::v0_6_1 {
 
 		ssize_t bfRead(
 				FileView file,
-				void* buf, size_t* bufBeginPtr, size_t* bufEndPtr,
+				void* buf, size_t* bufBeginPtr, size_t* bufEndPtr, size_t bufCapacity,
 				void* dst, size_t count
 		) {
 			//         | ..... | DataDataDataDataData | .......................... |
@@ -32,35 +32,50 @@ namespace posixfio {
 			// All bytes before `begin` have already been read
 			// All bytes between `begin` and `end` are queued to be read
 			#define BYTES_(PTR_) reinterpret_cast<byte_t*>(PTR_)
+			#ifdef POSIXFIO_NOTHROW
+				#define CHECK_ERR_ { if(rd < 0) [[unlikely]] { return rd; } }
+			#else
+				#define CHECK_ERR_ { assert(rd >= 0); }
+			#endif
 			assert(buf);
 			assert(bufEndPtr);
 			assert(bufBeginPtr);
-			auto initBufEnd = *bufEndPtr;
-			auto initBufBegin = *bufBeginPtr;
-			auto initWindowSize = initBufEnd - initBufBegin;  assert(initBufEnd >= initBufBegin);
-			if(count < initWindowSize) {
-				// Enough available bytes
+			const auto initBufEnd = *bufEndPtr;
+			const auto initBufBegin = *bufBeginPtr;
+			const auto windowSize = initBufEnd - initBufBegin;  assert(initBufEnd >= initBufBegin);
+			const bool smallReadRequest = (count < bufCapacity);
+			const bool someBytesBuffered = (windowSize > 0);
+			const bool someSpaceAvailable = (initBufEnd < bufCapacity);
+			if(someBytesBuffered) {
+				count = std::min(count, windowSize);
 				memcpy(dst, BYTES_(buf) + initBufBegin, count);
 				*bufBeginPtr += count;
 				return count;
-			} else {
-				#ifdef POSIXFIO_NOTHROW
-					#define CHECK_ERR_ { if(rd < 0) [[unlikely]] { return rd; } }
-				#else
-					#define CHECK_ERR_ { assert(rd >= 0); }
-				#endif
-				size_t directRdCount = count - initWindowSize;
-				memcpy(dst, BYTES_(buf) + initBufBegin, initWindowSize);
-				#ifdef POSIXFIO_DBG_LIMIT_DIRECT_RD
-					directRdCount = std::min(directRdCount, decltype(directRdCount)(POSIXFIO_DBG_LIMIT_DIRECT_RD));
-				#endif
-				ssize_t rd = file.read(BYTES_(dst) + initWindowSize, directRdCount);
+			}
+			else if(smallReadRequest && someSpaceAvailable) {
+				// Populate the buffer and extract some bytes
+				ssize_t rd = file.read(BYTES_(buf), bufCapacity);
 				CHECK_ERR_
+				size_t retn = std::min<size_t>(count, rd);
+				*bufBeginPtr = retn;
+				*bufEndPtr = rd;
+				memcpy(BYTES_(dst), BYTES_(buf), retn);
+				return retn;
+			}
+			else {
+				// Read-through
+				size_t directRdCount = count - windowSize;
+				memcpy(dst, BYTES_(buf) + initBufBegin, windowSize);
 				*bufBeginPtr = 0;
 				*bufEndPtr = 0;
-				#undef CHECK_ERR_
-				return rd + initWindowSize;
+				#ifdef POSIXFIO_DBG_LIMIT_DIRECT_RD
+					directRdCount = std::min<size_t>(directRdCount, POSIXFIO_DBG_LIMIT_DIRECT_RD);
+				#endif
+				ssize_t rd = file.read(BYTES_(dst) + windowSize, directRdCount);
+				CHECK_ERR_
+				return windowSize + rd;
 			}
+			#undef CHECK_ERR_
 			#undef BYTES_
 		}
 
@@ -75,6 +90,11 @@ namespace posixfio {
 			// All bytes between `begin` and `end` are queued to be written
 			#define BYTES_(PTR_) reinterpret_cast<byte_t*>(PTR_)
 			#define CBYTES_(PTR_) reinterpret_cast<const byte_t*>(PTR_)
+			#ifdef POSIXFIO_NOTHROW
+				#define CHECK_ERR_ { assert(wr != 0);  if(wr < 0) [[unlikely]] { return wr; } }
+			#else
+				#define CHECK_ERR_ { assert(wr > 0); }
+			#endif
 			assert(buf);
 			assert(bufEndPtr);
 			assert(bufBeginPtr);
@@ -82,57 +102,56 @@ namespace posixfio {
 			const auto initBufBegin = *bufBeginPtr;
 			assert(initBufEnd >= initBufBegin);
 			const auto initAvailSpace = bufCapacity - initBufEnd;
-			if(count <= initAvailSpace) {
-				// Enough available space in the buffer
-				memcpy(BYTES_(buf) + initBufEnd, src, count);
+			const auto bufferedWrCount = initBufEnd - initBufBegin;
+			const bool smallWriteRequest = (count < bufCapacity);
+			const bool someSpaceAvailable = (initAvailSpace > 0);
+			const bool bufferNotEmpty = (initBufBegin < initBufEnd);
+			if(someSpaceAvailable && (smallWriteRequest || bufferNotEmpty)) {
+				count = std::min(count, initAvailSpace);
+				memcpy(BYTES_(buf) + *bufEndPtr, src, count);
 				*bufEndPtr += count;
+				assert(*bufEndPtr <= bufCapacity);
 				return count;
 			} else {
-				// Need to flush buffer, then write directly
-				// [     | ..A.. | ...........B........... ]   ...........C........
-				// A: previously queued   B: queued just now   C: unbuffered write
-				// A+B: buffered write    B+C: current user-requested write
-				#ifdef POSIXFIO_NOTHROW
-					#define CHECK_ERR_ { assert(wr != 0);  if(wr < 0) [[unlikely]] { return wr; } }
-				#else
-					#define CHECK_ERR_ { assert(wr > 0); }
-				#endif
-				size_t bufferedWrCount = bufCapacity - initBufBegin;
-				size_t prevQueued = initBufEnd - initBufBegin;
-				size_t directWrCount = count + prevQueued - bufferedWrCount;
-				assert(bufferedWrCount + directWrCount == count + prevQueued);
-				ssize_t wr = 0;
 				if(bufferedWrCount > 0) {
-					memcpy(BYTES_(buf) + initBufEnd, src, initAvailSpace);
-					wr = file.write(CBYTES_(buf) + initBufBegin, bufferedWrCount);
-					CHECK_ERR_
-					assert(size_t(wr) <= bufferedWrCount);
+					// Flush the buffer
+					ssize_t wr;
+					size_t wrTotal = 0;
+					do {
+						// Nothing can be done until the buffer is flushed;
+						// a possible solution would report a 0-byte write, but, while
+						// technically allowed, a user could reasonably believe that, like a read op,
+						// a write op would write *at least* one byte.
+						size_t flushCount = bufferedWrCount - wrTotal;
+						wr = file.write(BYTES_(buf), flushCount);
+						CHECK_ERR_
+						*bufBeginPtr += wr;
+						wrTotal += wr;
+						assert(*bufBeginPtr <= *bufEndPtr);
+						assert(size_t(wrTotal) <= bufferedWrCount);
+					} while (wrTotal < bufferedWrCount);
+					assert(wr > 0 /* An error should already have been thrown or returned at this point */);
+					assert(wrTotal == bufferedWrCount /* Needs to write out the entire buffer */);
 				}
-				if(size_t(wr) < bufferedWrCount) {
-					// Buffer has leftover bytes (implying incomplete write)
-					size_t shift = initBufBegin + wr;
-					size_t newBufEnd = bufCapacity - shift;
-					assert(bufCapacity > shift);
-					memmove(buf, BYTES_(buf) + shift, newBufEnd);
-					*bufBeginPtr = 0;
-					*bufEndPtr = newBufEnd;
-					assert(newBufEnd >= initBufEnd);
-					return wr + (newBufEnd - initBufEnd);
+				// At this point, the buffer is guaranteed to be empty
+				assert(*bufBeginPtr == *bufEndPtr);
+				*bufBeginPtr = 0;
+				if(count < bufCapacity) {
+					// Write some bytes to the buffer, eventually report a partial write
+					count = std::min(count, bufCapacity);
+					memcpy(BYTES_(buf), src, count);
+					*bufEndPtr = count;
+					return count;
 				} else {
-					// Buffer has been completely written
-					#ifdef POSIXFIO_DBG_LIMIT_DIRECT_WR
-						directWrCount = std::min(directWrCount, decltype(directWrCount)(POSIXFIO_DBG_LIMIT_DIRECT_WR));
-					#endif
-					wr = file.write(CBYTES_(src) + (bufferedWrCount - prevQueued), directWrCount);
-					CHECK_ERR_
-					assert(size_t(wr) <= directWrCount);
-					*bufBeginPtr = 0;
+					// Write-through
 					*bufEndPtr = 0;
-					return wr + bufferedWrCount - prevQueued;
+					ssize_t wr = file.write(CBYTES_(src), count);
+					CHECK_ERR_;
+					return wr;
 				}
-				#undef CHECK_ERR_
 			}
 
+			#undef CHECK_ERR_
 			#undef BYTES_
 			#undef CBYTES_
 		}
@@ -279,7 +298,7 @@ namespace posixfio {
 			file_(file),
 			begin_(0),
 			end_(0),
-			capacity_(cap > 1? size_t(1) : cap),
+			capacity_(cap > 1? cap : size_t(1)),
 			buffer_((byte_t*) operator new[](capacity_ * sizeof(capacity_)))
 	{
 		assert(cap > 0);
@@ -304,14 +323,14 @@ namespace posixfio {
 
 
 	ssize_t InputBuffer::read(void* userBuf, size_t count) {
-		return _buffer_op_impl::bfRead(file_, buffer_, &begin_, &end_, userBuf, count);
+		return _buffer_op_impl::bfRead(file_, buffer_, &begin_, &end_, capacity_, userBuf, count);
 	}
 
 
 	ssize_t InputBuffer::readLeast(void* buf, size_t least, size_t count) {
 		ssize_t total = 0;
 		while(size_t(total) < least) {
-			auto rd = _buffer_op_impl::bfRead(file_, buffer_, &begin_, &end_, buf, ssize_t(count) - total);
+			auto rd = _buffer_op_impl::bfRead(file_, buffer_, &begin_, &end_, capacity_, reinterpret_cast<byte_t*>(buf) + total, ssize_t(count) - total);
 			if(rd == 0) [[unlikely]] return total;
 			if(rd < 0) [[unlikely]] return -1;
 			total += rd;
@@ -350,7 +369,9 @@ namespace posixfio {
 
 
 	OutputBuffer::OutputBuffer() noexcept:
-			file_()
+			file_(),
+			begin_(0),
+			end_(0)
 			#ifndef NDEBUG
 				, buffer_(nullptr)
 			#endif
@@ -376,7 +397,7 @@ namespace posixfio {
 			file_(file),
 			begin_(0),
 			end_(0),
-			capacity_(cap > 1? size_t(1) : cap),
+			capacity_(cap > 1? cap : size_t(1)),
 			buffer_((byte_t*) operator new[](capacity_ * sizeof(capacity_)))
 	{
 		assert(cap > 0);
@@ -409,8 +430,8 @@ namespace posixfio {
 	ssize_t OutputBuffer::writeLeast(const void* buf, size_t least, size_t count) {
 		ssize_t total = 0;
 		while(size_t(total) < least) {
-			auto wr = _buffer_op_impl::bfWrite(file_, buffer_, &begin_, &end_, capacity_, buf, ssize_t(count) - total);
-			if(wr == 0) [[unlikely]] return total;
+			auto wr = _buffer_op_impl::bfWrite(file_, buffer_, &begin_, &end_, capacity_, reinterpret_cast<const byte_t*>(buf) + total, ssize_t(count) - total);
+			if(wr == 0) [[unlikely]] return total; // Shouldn't happen at all
 			if(wr < 0) [[unlikely]] return -1;
 			total += wr;
 		}

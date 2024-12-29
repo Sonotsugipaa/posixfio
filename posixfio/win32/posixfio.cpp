@@ -16,38 +16,45 @@
 
 inline namespace posixfio_w32_impl {
 
-	constexpr DWORD desired_access_from_openflags(OpenFlagBits f) {
+	constexpr DWORD desired_access_from_openflags(posixfio::OpenFlags f) {
+		using enum posixfio::OpenFlags;
+		using Bits = posixfio::OpenFlagBits;
 		DWORD r = 0;
-		if(f & O_RDONLY) r =     FILE_GENERIC_READ;
-		if(f & O_WRONLY) r = r | FILE_GENERIC_WRITE;
+		if(Bits(f) & Bits(eRdonly)) r =     FILE_GENERIC_READ;
+		if(Bits(f) & Bits(eWronly)) r = r | FILE_GENERIC_WRITE;
 		return r;
 	}
 
-	constexpr DWORD sharing_mode_from_openflags(OpenFlagBits f) {
+	constexpr DWORD sharing_mode_from_openflags(posixfio::OpenFlags f) {
+		using enum posixfio::OpenFlags;
+		using Bits = posixfio::OpenFlagBits;
 		DWORD r = 0;
-		if(f & O_TRUNC)  r =     FILE_SHARE_DELETE;
-		if(f & O_RDONLY) r = r | FILE_SHARE_READ;
-		if(f & O_WRONLY) r = r | FILE_SHARE_WRITE;
+		if(Bits(f) & Bits(eTrunc))  r =     FILE_SHARE_DELETE;
+		if(Bits(f) & Bits(eRdonly)) r = r | FILE_SHARE_READ;
+		if(Bits(f) & Bits(eWronly)) r = r | FILE_SHARE_WRITE;
 		return r;
 	}
 
-	constexpr DWORD creation_disposition_from_openflags(OpenFlagBits f) {
-		DWORD r = 0;
-		bool trunc = f & O_TRUNC;
-		bool creat = f & O_CREAT;
+	constexpr DWORD creation_disposition_from_openflags(posixfio::OpenFlags f) {
+		using enum posixfio::OpenFlags;
+		using Bits = posixfio::OpenFlagBits;
+		bool trunc = Bits(f) & Bits(eTrunc);
+		bool creat = Bits(f) & Bits(eCreat);
 		if(trunc && creat) return CREATE_ALWAYS;
 		if(creat) return OPEN_ALWAYS;
 		if(trunc) return TRUNCATE_EXISTING;
 		return OPEN_EXISTING;
 	}
 
-	constexpr DWORD flags_and_attributes_from_openflags(OpenFlagBits f) {
+	constexpr DWORD flags_and_attributes_from_openflags(posixfio::OpenFlags f) {
+		using enum posixfio::OpenFlags;
+		using Bits = posixfio::OpenFlagBits;
 		DWORD r = FILE_FLAG_POSIX_SEMANTICS;
-		if(f & O_TMPFILE) r = r | FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE;
-		else              r = r | FILE_ATTRIBUTE_NORMAL;
-		if(f & O_DIRECT)  r = r | FILE_FLAG_NO_BUFFERING;
-		if(f & O_SYNC)    r = r | FILE_FLAG_WRITE_THROUGH;
-		if(f & O_DSYNC)   r = r | FILE_FLAG_WRITE_THROUGH;
+		if(Bits(f) & Bits(eTmpfile)) r = r | FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE;
+		else                         r = r | FILE_ATTRIBUTE_NORMAL;
+		if(Bits(f) & Bits(eDirect))  r = r | FILE_FLAG_NO_BUFFERING;
+		if(Bits(f) & Bits(eSync))    r = r | FILE_FLAG_WRITE_THROUGH;
+		if(Bits(f) & Bits(eDsync))   r = r | FILE_FLAG_WRITE_THROUGH;
 		return r;
 	}
 
@@ -140,23 +147,23 @@ namespace posixfio {
 	}
 
 
-	File File::open(const char* pathname, OpenFlagBits flags, posixfio::mode_t mode) {
+	File File::open(const char* pathname, OpenFlags flags, posixfio::mode_t mode) {
 		(void) mode;
-		assert(flags < OPENFLAGS_UNSUPPORTED);
+		assert(flags < OpenFlags::eUnsupported);
 
 		File r = CreateFileA(
 			pathname,
-			desired_access_from_openflags(flags),
-			sharing_mode_from_openflags(flags),
+			desired_access_from_openflags(OpenFlags(flags)),
+			sharing_mode_from_openflags(OpenFlags(flags)),
 			{ },
-			creation_disposition_from_openflags(flags),
-			flags_and_attributes_from_openflags(flags),
+			creation_disposition_from_openflags(OpenFlags(flags)),
+			flags_and_attributes_from_openflags(OpenFlags(flags)),
 			nullptr );
 
 		if(! r) {
 			POSIXFIO_THROWERRNO(NULL_FD, (void) 0);
 		} else {
-			if(flags & O_APPEND) {
+			if(OpenFlagBits(flags) & OpenFlagBits(OpenFlags::eAppend)) {
 				LARGE_INTEGER li = { .QuadPart = 0 };
 				SetFilePointerEx(r, li, nullptr, FILE_END);
 			}
@@ -166,7 +173,7 @@ namespace posixfio {
 	}
 
 
-	File File::open(std::string_view pathname, OpenFlagBits flags, posixfio::mode_t mode) {
+	File File::open(std::string_view pathname, OpenFlags flags, posixfio::mode_t mode) {
 		auto len = pathname.size();
 		auto bf = new char[len + 1];
 		std::exception_ptr exception = nullptr;
@@ -182,7 +189,7 @@ namespace posixfio {
 
 
 	File File::creat(std::string_view pathname, mode_t mode) {
-		return File::open(pathname, posixfio_compat::OpenFlags::O_CREAT, mode);
+		return File::open(pathname, OpenFlags::eCreat, mode);
 	}
 
 
@@ -287,10 +294,13 @@ namespace posixfio {
 	}
 
 
-	off_t File::lseek(off_t offset, int whence) {
+	off_t File::lseek(off_t offset, Whence whence) {
+		static_assert(DWORD(Whence::eSet) == FILE_BEGIN);
+		static_assert(DWORD(Whence::eCur) == FILE_CURRENT);
+		static_assert(DWORD(Whence::eEnd) == FILE_END);
 		LARGE_INTEGER offsetLi = { .QuadPart = offset };
 		LARGE_INTEGER r;
-		bool seek = SetFilePointerEx(fd_, offsetLi, &r, whence);
+		bool seek = SetFilePointerEx(fd_, offsetLi, &r, DWORD(whence));
 		if(! seek) POSIXFIO_THROWERRNO(fd_, return -1);
 		return r.QuadPart;
 	}
@@ -319,17 +329,17 @@ namespace posixfio {
 			if(! r) POSIXFIO_THROWERRNO(fd_, return false);
 			return true;
 		#else
-			cur = lseek(0, SEEK_CUR);
+			cur = lseek(0, Whence::eCur);
 			if(cur != length) {
 				try {
-					lseek(length, SEEK_SET); // Could realistically fail for `length` being out of bounds
+					lseek(length, Whence::eSet); // Could realistically fail for `length` being out of bounds
 				} catch(...) {
-					lseek(cur, SEEK_SET);
+					lseek(cur, Whence::eSet);
 					std::rethrow_exception(std::current_exception());
 				}
 				bool r = SetEndOfFile(fd_);
 				if(! r) POSIXFIO_THROWERRNO(fd_, (void) 0);
-				lseek(cur, SEEK_SET);
+				lseek(cur, Whence::eSet);
 			} else {
 				bool r = SetEndOfFile(fd_);
 				if(! r) POSIXFIO_THROWERRNO(fd_, (void) 0);
@@ -345,7 +355,7 @@ namespace posixfio {
 		SECURITY_ATTRIBUTES sec;
 		sec.nLength = sizeof(SECURITY_ATTRIBUTES);
 		sec.lpSecurityDescriptor = nullptr;
-		sec.bInheritHandle = bool(int(prot) & int(MemMapFlags::eShared));
+		sec.bInheritHandle = bool(MemMapFlagBits(flags) & MemMapFlagBits(MemMapFlags::eShared));
 		DWORD protFlag;
 		DWORD desiredAccess;
 		DWORD off2[2]; mk_dword_2(off2, off);

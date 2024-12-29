@@ -10,16 +10,16 @@
 
 namespace posixfio {
 
-	namespace _buffer_op_impl {
+	namespace _buffer_op_impl { inline namespace v0_6_1 {
 
 		/* This namespace is only to be used internally by this library,
 		 * and its signatures may change at any time in any way.
 		 * */
 
-		ssize_t bfRead(FileView, void* buf, size_t* bufBegPtr, size_t* bufEndPtr, void* dst, size_t count);
+		ssize_t bfRead(FileView, void* buf, size_t* bufBegPtr, size_t* bufEndPtr, size_t bufCapacity, void* dst, size_t count);
 		ssize_t bfWrite(FileView, void* buf, size_t* bufBegPtr, size_t* bufEndPtr, size_t bufCapacity, const void* src, size_t count);
 
-	};
+	}};
 
 
 
@@ -63,7 +63,7 @@ namespace posixfio {
 
 		InputBuffer& operator=(InputBuffer&&) noexcept;
 
-		inline const FileView file() const { return file_; }
+		inline const FileView file() const noexcept { return file_; }
 
 		/** Similar to File::read, but may fail after a partial read. */
 		ssize_t read(void* buf, size_t count);
@@ -84,16 +84,19 @@ namespace posixfio {
 		ssize_t fwd();
 
 		/** Returns a pointer to the first ready-to-read byte in the buffer. */
-		inline byte_t* data() { return buffer_ + begin_; }
+		inline byte_t* data() noexcept { return buffer_ + begin_; }
 
 		/** Returns a pointer to the first ready-to-read byte in the buffer. */
-		inline const byte_t* data() const { return buffer_ + begin_; }
+		inline const byte_t* data() const noexcept { return buffer_ + begin_; }
 
 		/** Returns the number of ready-to-read bytes. */
-		inline size_t size() const { return end_ - begin_; }
+		inline size_t size() const noexcept { return end_ - begin_; }
+
+		/** Returns the maximum number of ready-to-read bytes. */
+		inline size_t capacity() const noexcept { return capacity_; }
 
 		/** Discard the entire buffer; the next read will try to fill the buffer. */
-		inline void discard() { begin_ = 0;  end_ = 0; }
+		inline void discard() noexcept { begin_ = 0;  end_ = 0; }
 	};
 
 
@@ -114,7 +117,7 @@ namespace posixfio {
 
 		OutputBuffer& operator=(OutputBuffer&&) noexcept;
 
-		inline const FileView file() const { return file_; }
+		inline const FileView file() const noexcept { return file_; }
 
 		/** Similar to File::write, but may fail after a partial write. */
 		ssize_t write(const void* buf, size_t count);
@@ -125,22 +128,28 @@ namespace posixfio {
 		/** Similar to writeLeast, but may fail after a partial write. */
 		ssize_t writeLeast(const void* buf, size_t least, size_t count);
 
+		/** Returns the number of unwritten bytes stored in the buffer. */
+		size_t dirtyBytes() const noexcept { return end_ - begin_; };
+
+		/** Returns the maximum number of unwritten bytes stored in the buffer. */
+		size_t capacity() const noexcept { return capacity_; }
+
 		/** Write all the ready-to-write bytes. */
 		void flush();
 	};
 
 
-	template<size_t capacity = 4096>
+	template<size_t capacity_tp = 4096>
 	class ArrayInputBuffer {
-		static_assert(capacity > 0);
+		static_assert(capacity_tp > 0);
 	private:
 		FileView file_;
 		size_t bufferBegin_;
 		size_t bufferEnd_;
-		byte_t buffer_[capacity];  static_assert(capacity > 0);
+		byte_t buffer_[capacity_tp];  static_assert(capacity_tp > 0);
 
 	public:
-		ArrayInputBuffer() = default;
+		ArrayInputBuffer(): file_(), bufferBegin_(0), bufferEnd_(0) { }
 		ArrayInputBuffer(const ArrayInputBuffer&) = delete;
 
 		ArrayInputBuffer(ArrayInputBuffer&& mv):
@@ -168,14 +177,14 @@ namespace posixfio {
 
 		/** Similar to File::read, but may fail after a partial read. */
 		ssize_t read(void* buf, size_t count) {
-			return _buffer_op_impl::bfRead(file_, buffer_, &bufferBegin_, &bufferEnd_, buf, count);
+			return _buffer_op_impl::bfRead(file_, buffer_, &bufferBegin_, &bufferEnd_, capacity_tp, buf, count);
 		}
 
 		/** Similar to readLeast, but may fail after a partial read. */
 		ssize_t readLeast(void* buf, size_t least, size_t count) {
 			ssize_t total = 0;
 			while(total < ssize_t(least)) {
-				auto rd = _buffer_op_impl::bfRead(file_, buffer_, &bufferBegin_, &bufferEnd_, buf, ssize_t(count) - total);
+				auto rd = _buffer_op_impl::bfRead(file_, buffer_, &bufferBegin_, &bufferEnd_, capacity_tp, reinterpret_cast<byte_t*>(buf) + total, ssize_t(count) - total);
 				if(rd == 0) [[unlikely]] return total;
 				if(rd < 0) [[unlikely]] return -1;
 				total += rd;
@@ -190,8 +199,8 @@ namespace posixfio {
 
 		/** Try to fill the buffer, if it isn't already full. */
 		ssize_t fill() {
-			if(bufferEnd_ < capacity) {
-				ssize_t rd = file_.read(buffer_ + bufferEnd_, capacity - bufferEnd_);
+			if(bufferEnd_ < capacity_tp) {
+				ssize_t rd = file_.read(buffer_ + bufferEnd_, capacity_tp - bufferEnd_);
 				if(rd >= 0) [[likely]]  bufferEnd_ += rd;
 				return rd;
 			} else {
@@ -206,7 +215,7 @@ namespace posixfio {
 		 * The return value follows File::read semantics. */
 		ssize_t fwd() {
 			if(bufferBegin_ + 1 >= bufferEnd_) {
-				if(bufferEnd_ >= capacity)  discard();
+				if(bufferEnd_ >= capacity_tp)  discard();
 				ssize_t fl = fill();
 				if(fl <= 0)  return fl;
 			} else {
@@ -226,16 +235,16 @@ namespace posixfio {
 	};
 
 
-	template<size_t capacity = 4096>
+	template<size_t capacity_tp = 4096>
 	class ArrayOutputBuffer {
 	private:
 		FileView file_;
 		size_t bufferBegin_;
 		size_t bufferEnd_;
-		byte_t buffer_[capacity];  static_assert(capacity > 0);
+		byte_t buffer_[capacity_tp];  static_assert(capacity_tp > 0);
 
 	public:
-		ArrayOutputBuffer() = default;
+		ArrayOutputBuffer(): file_(), bufferBegin_(0), bufferEnd_(0) { }
 		ArrayOutputBuffer(const ArrayOutputBuffer&) = delete;
 
 		ArrayOutputBuffer(ArrayOutputBuffer&& mv):
@@ -267,21 +276,21 @@ namespace posixfio {
 			return * new (this) ArrayOutputBuffer(std::move(mv));
 		}
 
-		const FileView file() const { return file_; }
+		const FileView file() const noexcept { return file_; }
 
 		/** Similar to File::write, but may fail after a partial write. */
 		ssize_t write(const void* buf, size_t count) {
-			return _buffer_op_impl::bfWrite(file_, buffer_, &bufferBegin_, &bufferEnd_, capacity, buf, count);
+			return _buffer_op_impl::bfWrite(file_, buffer_, &bufferBegin_, &bufferEnd_, capacity_tp, buf, count);
 		}
 
 		/** Similar to writeLeast, but may fail after a partial write. */
 		ssize_t writeLeast(const void* buf, size_t least, size_t count) {
 			ssize_t total = 0;
 			while(total < ssize_t(least)) {
-				auto rd = _buffer_op_impl::bfWrite(file_, buffer_, &bufferBegin_, &bufferEnd_, capacity, buf, ssize_t(count) - total);
-				if(rd == 0) [[unlikely]] return total;
-				if(rd < 0) [[unlikely]] return -1;
-				total += rd;
+				auto wr = _buffer_op_impl::bfWrite(file_, buffer_, &bufferBegin_, &bufferEnd_, capacity_tp, reinterpret_cast<const byte_t*>(buf) + total, ssize_t(count) - total);
+				if(wr == 0) [[unlikely]] return total; // Shouldn't happen at all
+				if(wr < 0) [[unlikely]] return -1;
+				total += wr;
 			}
 			return total;
 		}
@@ -299,6 +308,12 @@ namespace posixfio {
 			bufferBegin_ = 0;
 			bufferEnd_ = 0;
 		}
+
+		/** Returns the number of unwritten bytes stored in the buffer. */
+		size_t dirtyBytes() const noexcept { return bufferEnd_ - bufferBegin_; };
+
+		/** Returns the maximum number of unwritten bytes stored in the buffer. */
+		size_t capacity() const noexcept { return capacity_tp; }
 	};
 
 }

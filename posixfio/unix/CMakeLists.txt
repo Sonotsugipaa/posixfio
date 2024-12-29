@@ -24,4 +24,7 @@ if(NOT POSIXFIO_LOCAL)
 		"${POSIXFIO_INCLUDE_DIR}/posixfio.hpp"
 		"${POSIXFIO_INCLUDE_DIR}/posixfio_tl.hpp"
 		DESTINATION include )
+	install(FILES
+		"${POSIXFIO_INCLUDE_DIR}/posixfio/constants.hpp"
+		DESTINATION include/posixfio )
 endif(NOT POSIXFIO_LOCAL)

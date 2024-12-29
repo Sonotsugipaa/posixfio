@@ -23,6 +23,11 @@ namespace {
 	constexpr auto eNeutral = utest::ResultType::eNeutral;
 	constexpr auto eSuccess = utest::ResultType::eSuccess;
 
+	constexpr auto eCreat  = OpenFlags::eCreat;
+	constexpr auto eRdonly = OpenFlags::eRdonly;
+	constexpr auto eTrunc  = OpenFlags::eTrunc;
+	constexpr auto eRdwr   = OpenFlags::eRdwr;
+
 	const std::string tmpFile = "test-tmpfile";
 
 	std::string ioPayload;
@@ -84,7 +89,7 @@ namespace {
 	utest::ResultType write_file(std::ostream& out) {
 		File f;
 		try {
-			f = File::open(tmpFile.c_str(), O_RDWR | O_CREAT | O_TRUNC, 0600);
+			f = File::open(tmpFile.c_str(), eRdwr | eCreat | eTrunc, 0600);
 			if(f) {
 				f.ftruncate(ioPayload.size());
 				MemMapping map = f.mmap(ioPayload.size(), MemProtFlags::eWrite, MemMapFlags::eShared, 0);
@@ -112,7 +117,7 @@ namespace {
 	utest::ResultType read_file(std::ostream& out) {
 		File f;
 		try {
-			f = File::open(tmpFile.c_str(), O_RDONLY);
+			f = File::open(tmpFile.c_str(), eRdonly);
 			if(f) {
 				MemMapping map = f.mmap(ioPayload.size(), MemProtFlags::eRead, MemMapFlags::eShared, 0);
 				auto addr = map.get<char>();
@@ -138,6 +143,24 @@ namespace {
 		return eSuccess;
 	};
 
+
+	utest::ResultType move_map(std::ostream& out) {
+		File f;
+		try {
+			f = File::open(tmpFile.c_str(), eRdwr | eCreat | eTrunc, 0600);
+			if(f) {
+				f.ftruncate(ioPayload.size());
+				MemMapping src = f.mmap(ioPayload.size(), MemProtFlags::eWrite, MemMapFlags::eShared, 0);
+				MemMapping dst = std::move(src);
+			}
+		} catch(...) { f = { }; }
+		if(! f) {
+			out << "ERRNO " << errno << ' ' << errno_str(errno) << '\n';
+			return eFailure;
+		}
+		return eSuccess;
+	};
+
 }
 
 
@@ -147,7 +170,8 @@ int main(int, char**) {
 	ioPayload = mkPayload();
 	batch
 		.run("Write mapped file", write_file)
-		.run("Read mapped file", read_file);
+		.run("Read mapped file", read_file)
+		.run("Move mapping", move_map);
 	ioPayload = mkPayload();
 	return batch.failures() == 0? EXIT_SUCCESS : EXIT_FAILURE;
 }

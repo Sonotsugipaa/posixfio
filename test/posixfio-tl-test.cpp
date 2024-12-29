@@ -1,6 +1,11 @@
 #include <test_tools.hpp>
 
-#include "../include/win32/posixfio_tl.hpp"
+#define POSIXFIO_STL_STRINGVIEW
+#if defined POSIXFIO_UNIX
+	#include "../include/unix/posixfio_tl.hpp"
+#elif defined POSIXFIO_WIN32
+	#include "../include/win32/posixfio_tl.hpp"
+#endif
 
 #include <array>
 #include <iostream>
@@ -19,6 +24,12 @@ namespace {
 	constexpr auto eFailure = utest::ResultType::eFailure;
 	constexpr auto eNeutral = utest::ResultType::eNeutral;
 	constexpr auto eSuccess = utest::ResultType::eSuccess;
+
+	constexpr auto eCreat  = OpenFlags::eCreat;
+	constexpr auto eRdonly = OpenFlags::eRdonly;
+	constexpr auto eWronly = OpenFlags::eWronly;
+	constexpr auto eRdwr   = OpenFlags::eRdwr;
+	constexpr auto eTrunc  = OpenFlags::eTrunc;
 
 	const std::string tmpFile = "test-tmpfile";
 
@@ -123,7 +134,7 @@ namespace {
 
 
 	std::string mkPayload(size_t payloadSize) {
-		static const std::string_view charset = "abcdefghi1234567890\n ";
+		static const std::string_view charset = "abcdefghi1234567890";
 		static decltype(payloadSize) state = 2;
 		std::string r;  r.reserve(payloadSize);
 		auto rng = std::minstd_rand(state += payloadSize);
@@ -174,7 +185,7 @@ namespace {
 		static_assert((outputBufferStaticCapacity == 0) != (outputBufferDynamicCapacity == 0));
 		using Buffer = OutputBuffer<outputBufferStaticCapacity>::type;
 		try {
-			File f = alwaysThrowErr(File::open(tmpFile.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600));
+			File f = alwaysThrowErr(File::open(tmpFile.c_str(), eWronly | eCreat | eTrunc, 0600));
 			{
 				Buffer buf = OutputBuffer<outputBufferStaticCapacity>::ctor(
 					f, outputBufferDynamicCapacity );
@@ -204,7 +215,7 @@ namespace {
 		static_assert((inputBufferStaticCapacity == 0) != (inputBufferDynamicCapacity == 0));
 		using Buffer = InputBuffer<inputBufferStaticCapacity>::type;
 		try {
-			File f = alwaysThrowErr(File::open(tmpFile.c_str(), O_RDONLY));
+			File f = alwaysThrowErr(File::open(tmpFile.c_str(), eRdonly));
 			Buffer buf = InputBuffer<inputBufferStaticCapacity>::ctor(
 				f, inputBufferDynamicCapacity );
 			std::unique_ptr<char[]> cmpString = std::make_unique<char[]>(ioPayload.size());
@@ -241,7 +252,7 @@ namespace {
 		static_assert((outputBufferStaticCapacity == 0) != (outputBufferDynamicCapacity == 0));
 		using Buffer = OutputBuffer<outputBufferStaticCapacity>::type;
 		try {
-			File f = alwaysThrowErr(File::open(tmpFile.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600));
+			File f = alwaysThrowErr(File::open(tmpFile.c_str(), eWronly | eCreat | eTrunc, 0600));
 			{
 				Buffer buf = OutputBuffer<outputBufferStaticCapacity>::ctor(
 					f, outputBufferDynamicCapacity );
@@ -272,7 +283,7 @@ namespace {
 		static_assert((inputBufferStaticCapacity == 0) != (inputBufferDynamicCapacity == 0));
 		using Buffer = InputBuffer<inputBufferStaticCapacity>::type;
 		try {
-			File f = alwaysThrowErr(File::open(tmpFile.c_str(), O_RDONLY));
+			File f = alwaysThrowErr(File::open(tmpFile.c_str(), eRdonly));
 			Buffer buf = InputBuffer<inputBufferStaticCapacity>::ctor(
 				f, inputBufferDynamicCapacity );
 			std::unique_ptr<char[]> cmpString = std::make_unique<char[]>(ioPayload.size());
@@ -310,7 +321,7 @@ namespace {
 		static_assert((inputBufferStaticCapacity == 0) != (inputBufferDynamicCapacity == 0));
 		using Buffer = InputBuffer<inputBufferStaticCapacity>::type;
 		try {
-			File f = alwaysThrowErr(File::open(tmpFile.c_str(), O_RDONLY));
+			File f = alwaysThrowErr(File::open(tmpFile.c_str(), eRdonly));
 			Buffer buf = InputBuffer<inputBufferStaticCapacity>::ctor(
 				f, inputBufferDynamicCapacity );
 			std::string cmpString;  cmpString.reserve(ioPayload.size());
@@ -336,9 +347,73 @@ namespace {
 	}
 
 
+	template<bool useArrayBuffer>
+	utest::ResultType rw_buffer_specific_chunks(std::ostream& out) {
+		constexpr size_t fileSize = 100;
+		constexpr size_t cap = 20;
+		constexpr size_t capStatic  = useArrayBuffer? cap : 0;
+		auto payload = mkPayload(30+10+20+50);
+		using InBuffer  = InputBuffer <capStatic>::type;
+		using OutBuffer = OutputBuffer<capStatic>::type;
+		try {
+			bool fail = false;
+			size_t offset = 0;
+			File f = alwaysThrowErr(File::open(tmpFile.c_str(), eRdwr));
+			OutBuffer obuf = OutputBuffer<capStatic>::ctor(f, cap);
+			#define EXPECT_WR_(COUNT_, EXP_IMMEDIATE_, EXP_BUFFERED_) { \
+				ssize_t wr; wr = alwaysThrowErr(obuf.write(payload.data() + offset, COUNT_)); \
+				if     (wr                != EXP_IMMEDIATE_) { out << "Immediate write mismatch at offset " << offset << ": got " << wr << ", expected " << EXP_IMMEDIATE_ << std::endl; fail = true; } \
+				else if(obuf.dirtyBytes() != EXP_BUFFERED_ ) { out << "Buffered write mismatch at offset " << offset << ": got " << obuf.dirtyBytes() << ", expected " << EXP_BUFFERED_ << std::endl; fail = true; } \
+				offset += wr; \
+			}
+			EXPECT_WR_(30, 30,  0) // offset 30
+			EXPECT_WR_(10, 10, 10) // offset 40
+			EXPECT_WR_(20, 10, 20) // offset 50 (20-10)
+			EXPECT_WR_(50, 50,  0) // offset 100
+			#undef EXPECT_WR_
+
+			obuf.flush();
+			f.lseek(0, Whence::eSet);
+			offset = 0;
+
+			InBuffer ibuf = InputBuffer<capStatic>::ctor(f, cap);
+			#define EXPECT_RD_(COUNT_, EXP_IMMEDIATE_, EXP_BUFFERED_) { \
+				ssize_t rd; rd = alwaysThrowErr(ibuf.read(cmpString.data() + offset, COUNT_)); \
+				if     (rd          != EXP_IMMEDIATE_) { out << "Immediate read mismatch at offset " << offset << ": got " << rd << ", expected " << EXP_IMMEDIATE_ << std::endl; fail = true; } \
+				else if(ibuf.size() != EXP_BUFFERED_ ) { out << "Buffered read mismatch at offset " << offset << ": got " << ibuf.size() << ", expected " << EXP_BUFFERED_ << std::endl; fail = true; } \
+				offset += rd; \
+			}
+			std::string cmpString;  cmpString.resize(payload.size());
+			EXPECT_RD_(10, 10, 10) // offset 10
+			EXPECT_RD_(20, 10,  0) // offset 20 (30-10)
+			EXPECT_RD_(30, 30,  0) // offset 50
+			EXPECT_RD_(15, 15,  5) // offset 65
+			EXPECT_RD_(10,  5,  0) // offset 70 (75-5)
+			EXPECT_RD_(30, 30,  0)
+			#undef EXPECT_RD_
+			if(offset != fileSize) {
+				out << "Size mismatch: expected " << fileSize << ", got " << offset << std::endl;
+				return eFailure;
+			}
+			auto cmpStringView = std::string_view(cmpString.begin(), cmpString.begin() + offset);
+			auto diffPt = diff(payload, cmpStringView);
+			if(0 <= diffPt) {
+				out << "File content does not match at char " << diffPt << std::endl;
+				return eFailure;
+			}
+			if(fail) {
+				out << "File content and size both match";
+				return eFailure;
+			}
+			return eSuccess;
+		} CATCH_ERRNO_(out)
+		return eFailure;
+	}
+
+
 	utest::ResultType fileerror_file_ebadf(std::ostream& out) {
 		int r = requireFileError(out, EBADF, [](std::ostream& out) {
-			auto f = File::open(tmpFile.c_str(), O_RDONLY | O_CREAT);
+			auto f = File::open(tmpFile.c_str(), eRdonly | eCreat);
 			ssize_t wr = f.write(tmpFile.c_str(), 1); // Can't write to a RDONLY file
 			switch(wr) {
 				case 0:  out << "CRITICAL: write(..., 1) returned 0" << std::endl;  return -1;
@@ -362,7 +437,7 @@ namespace {
 
 	utest::ResultType fileerror_buffer_ebadf(std::ostream& out) {
 		int r = requireFileError(out, EBADF, [](std::ostream& out) {
-			auto f = File::open(tmpFile.c_str(), O_WRONLY | O_CREAT | O_TRUNC);
+			auto f = File::open(tmpFile.c_str(), eWronly | eCreat | eTrunc);
 			auto fb = posixfio::InputBuffer(f, 1);
 			ssize_t rd = fb.fwd(); // Can't read from a WRONLY file
 			switch(rd) {
@@ -387,7 +462,7 @@ namespace {
 
 	utest::ResultType errno_buffer_ebadf(std::ostream& out) {
 		int r = requireErrno(out, EBADF, [](std::ostream& out) {
-			auto f = File::open(tmpFile.c_str(), O_WRONLY | O_CREAT | O_TRUNC);
+			auto f = File::open(tmpFile.c_str(), eWronly | eCreat | eTrunc);
 			auto fb = posixfio::InputBuffer(f, 1);
 			ssize_t rd = fb.fwd(); // Can't read from a WRONLY file
 			switch(rd) {
@@ -475,5 +550,7 @@ int main(int, char**) {
 	#ifndef POSIXFIO_NOTHROW
 		batch.run("Read write-only buffer (EBADF, legacy)", errno_buffer_ebadf);
 	#endif
+	batch.run("Optimal buffering (allocated)", rw_buffer_specific_chunks<false>);
+	batch.run("Optimal buffering (on stack)", rw_buffer_specific_chunks<true>);
 	return batch.failures() == 0? EXIT_SUCCESS : EXIT_FAILURE;
 }
