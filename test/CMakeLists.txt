@@ -24,3 +24,7 @@ target_link_libraries(posixfio-tl-test
 add_executable(posixfio-mmap-test posixfio-mmap-test.cpp)
 target_link_libraries(posixfio-mmap-test
 	test-tools posixfio)
+
+add_executable(posixfio-tl-perftest posixfio-tl-perftest.cpp)
+target_link_libraries(posixfio-tl-perftest
+	test-tools posixfio)
