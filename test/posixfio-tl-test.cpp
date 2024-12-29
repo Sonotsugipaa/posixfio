@@ -349,9 +349,10 @@ namespace {
 
 	template<bool useArrayBuffer>
 	utest::ResultType rw_buffer_specific_chunks(std::ostream& out) {
+		constexpr size_t fileSize = 100;
 		constexpr size_t cap = 20;
 		constexpr size_t capStatic  = useArrayBuffer? cap : 0;
-		auto payload = mkPayload(100);
+		auto payload = mkPayload(30+10+20+50);
 		using InBuffer  = InputBuffer <capStatic>::type;
 		using OutBuffer = OutputBuffer<capStatic>::type;
 		try {
@@ -359,14 +360,16 @@ namespace {
 			size_t offset = 0;
 			File f = alwaysThrowErr(File::open(tmpFile.c_str(), eRdwr));
 			OutBuffer obuf = OutputBuffer<capStatic>::ctor(f, cap);
-			#define EXPECT_WR_(COUNT_, EXP_IMMEDIATE_) { \
+			#define EXPECT_WR_(COUNT_, EXP_IMMEDIATE_, EXP_BUFFERED_) { \
 				ssize_t wr; wr = alwaysThrowErr(obuf.write(payload.data() + offset, COUNT_)); \
-				if(wr != EXP_IMMEDIATE_) { out << "Immediate write mismatch at offset " << offset << ": got " << wr << ", expected " << EXP_IMMEDIATE_ << std::endl; fail = true; } \
+				if     (wr                != EXP_IMMEDIATE_) { out << "Immediate write mismatch at offset " << offset << ": got " << wr << ", expected " << EXP_IMMEDIATE_ << std::endl; fail = true; } \
+				else if(obuf.dirtyBytes() != EXP_BUFFERED_ ) { out << "Buffered write mismatch at offset " << offset << ": got " << obuf.dirtyBytes() << ", expected " << EXP_BUFFERED_ << std::endl; fail = true; } \
 				offset += wr; \
 			}
-			EXPECT_WR_(30, 30)
-			EXPECT_WR_(10, 10)
-			EXPECT_WR_(60, 60)
+			EXPECT_WR_(30, 30,  0) // offset 30
+			EXPECT_WR_(10, 10, 10) // offset 40
+			EXPECT_WR_(20, 10, 20) // offset 50 (20-10)
+			EXPECT_WR_(50, 50,  0) // offset 100
 			#undef EXPECT_WR_
 
 			obuf.flush();
@@ -380,7 +383,7 @@ namespace {
 				else if(ibuf.size() != EXP_BUFFERED_ ) { out << "Buffered read mismatch at offset " << offset << ": got " << ibuf.size() << ", expected " << EXP_BUFFERED_ << std::endl; fail = true; } \
 				offset += rd; \
 			}
-			std::string cmpString;  cmpString.resize(payload.size() * 2);
+			std::string cmpString;  cmpString.resize(payload.size());
 			EXPECT_RD_(10, 10, 10) // offset 10
 			EXPECT_RD_(20, 10,  0) // offset 20 (30-10)
 			EXPECT_RD_(30, 30,  0) // offset 50
@@ -388,8 +391,8 @@ namespace {
 			EXPECT_RD_(10,  5,  0) // offset 70 (75-5)
 			EXPECT_RD_(30, 30,  0)
 			#undef EXPECT_RD_
-			if(offset != payload.size()) {
-				out << "Size mismatch: expected " << payload.size() << ", got " << offset << std::endl;
+			if(offset != fileSize) {
+				out << "Size mismatch: expected " << fileSize << ", got " << offset << std::endl;
 				return eFailure;
 			}
 			auto cmpStringView = std::string_view(cmpString.begin(), cmpString.begin() + offset);
